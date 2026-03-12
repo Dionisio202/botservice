@@ -1432,7 +1432,7 @@ async function doLogin() {
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
   try {
-    const res = await fetch(`${BASE}/admin/stats`, {
+    const res = await fetch(`${BASE}/panelbot/stats`, {
       headers: { 'x-admin-key': key }
     });
     if (res.status === 401) { errEl.style.display = 'block'; return; }
@@ -1464,7 +1464,7 @@ async function loadAll() {
 /* ══════════════ STATS ══════════════ */
 async function loadStats() {
   try {
-    const d = await api('/admin/stats');
+    const d = await api('/panelbot/stats');
     statsCache = d;
     const confirmed = (d.by_status['confirmed'] || 0) + (d.by_status['modified'] || 0);
     document.getElementById('kpi-confirmed').textContent = confirmed;
@@ -1559,7 +1559,7 @@ function renderStatusBars(containerId, byStatus) {
 
 /* ══════════════ SESSIONS ══════════════ */
 async function loadSessions(status) {
-  const url = status ? `/admin/sessions?status=${status}` : '/admin/sessions';
+  const url = status ? `/panelbot/sessions?status=${status}` : '/panelbot/sessions';
   try {
     const d = await api(url);
     allSessionsCache = d.data;
@@ -1602,7 +1602,7 @@ function filterSessions(status, btn) {
 async function cancelSession(orderId) {
   if (!confirm(`¿Cancelar sesión #${orderId}?`)) return;
   try {
-    await api(`/admin/sessions/${orderId}/cancel`, { method: 'POST' });
+    await api(`/panelbot/sessions/${orderId}/cancel`, { method: 'POST' });
     toast('Sesión cancelada');
     loadAll();
   } catch { toast('Error al cancelar', true); }
@@ -1611,7 +1611,7 @@ async function cancelSession(orderId) {
 /* ══════════════ BLACKLIST ══════════════ */
 async function loadBlacklist() {
   try {
-    const d = await api('/admin/blacklist');
+    const d = await api('/panelbot/blacklist');
     const tbody = document.getElementById('blacklist-body');
     if (!d.data.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin clientes bloqueados</td></tr>`;
@@ -1635,7 +1635,7 @@ async function loadBlacklist() {
 async function unblock(phone) {
   if (!confirm(`¿Desbloquear ${phone}?`)) return;
   try {
-    await api(`/admin/blacklist/${encodeURIComponent(phone)}`, { method: 'DELETE' });
+    await api(`/panelbot/blacklist/${encodeURIComponent(phone)}`, { method: 'DELETE' });
     toast('Cliente desbloqueado');
     loadAll();
   } catch { toast('Error al desbloquear', true); }
