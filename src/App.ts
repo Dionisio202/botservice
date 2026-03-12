@@ -7,6 +7,8 @@ import { adminRoutes } from './routes/admin-routes';
 const app: Application = express();
 
 const publicPath = path.join(process.cwd(), 'public');
+console.log('[Debug] publicPath:', publicPath);
+console.log('[Debug] admin.html path:', path.join(publicPath, 'admin.html'));
 
 app.use(
     express.json({
@@ -18,7 +20,12 @@ app.use(
 
 // ── Panel admin (HTML estático protegido) ─────────────────────────────────────
 app.get('/panelbot', (_req: Request, res: Response) => {
-    res.sendFile(path.join(publicPath, 'admin.html'));
+    res.sendFile(path.join(publicPath, 'admin.html'), (err) => {
+        if (err) {
+            console.error('[Debug] sendFile error:', err.message);
+            res.status(500).json({ error: 'No se encontró admin.html', path: publicPath });
+        }
+    });
 });
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
@@ -28,7 +35,8 @@ app.get('/', (_req: Request, res: Response) => {
 
 app.use('/webhook-woocommerce', wooRoutes);
 app.use('/webhook-meta',        metaRoutes);
-app.use('/panelbot', adminRoutes);
+app.use('/panelbot',            adminRoutes);
+
 // ── 404 / Error ───────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not found' });
