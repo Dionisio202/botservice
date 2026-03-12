@@ -6,10 +6,7 @@ import { adminRoutes } from './routes/admin-routes';
 
 const app: Application = express();
 
-const isProduction = process.env.NODE_ENV === 'production';
-const publicPath = isProduction
-    ? path.join(__dirname, '../../public')
-    : path.join(__dirname, '../public');
+const publicPath = path.join(process.cwd(), 'public');
 
 app.use(
     express.json({
