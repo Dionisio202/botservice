@@ -6,6 +6,11 @@ import { adminRoutes } from './routes/admin-routes';
 
 const app: Application = express();
 
+const isProduction = process.env.NODE_ENV === 'production';
+const publicPath = isProduction
+    ? path.join(__dirname, '../../public')
+    : path.join(__dirname, '../public');
+
 app.use(
     express.json({
         verify: (req: Request & { rawBody?: Buffer }, _res: Response, buf: Buffer) => {
@@ -16,7 +21,7 @@ app.use(
 
 // ── Panel admin (HTML estático protegido) ─────────────────────────────────────
 app.get('/admin', (_req: Request, res: Response) => {
-    res.sendFile(path.join(__dirname, '../public/admin.html'));
+    res.sendFile(path.join(publicPath, 'admin.html'));
 });
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
