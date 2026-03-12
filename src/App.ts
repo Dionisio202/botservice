@@ -17,7 +17,7 @@ app.use(
 );
 
 // ── Panel admin (HTML estático protegido) ─────────────────────────────────────
-app.get('/admin', (_req: Request, res: Response) => {
+app.get('/panelbot', (_req: Request, res: Response) => {
     res.sendFile(path.join(publicPath, 'admin.html'));
 });
 
@@ -28,8 +28,7 @@ app.get('/', (_req: Request, res: Response) => {
 
 app.use('/webhook-woocommerce', wooRoutes);
 app.use('/webhook-meta',        metaRoutes);
-app.use('/admin',               adminRoutes);
-
+app.use('/panelbot', adminRoutes);
 // ── 404 / Error ───────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not found' });
