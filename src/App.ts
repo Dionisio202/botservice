@@ -1,14 +1,20 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import path from 'path';
+import cors from 'cors'; 
+
 import { wooRoutes }   from './routes/woo.routes';
 import { metaRoutes }  from './routes/meta.routes';
 import { adminRoutes } from './routes/admin-routes';
 
 const app: Application = express();
 
-const publicPath = path.join(process.cwd(), 'public');
-console.log('[Debug] publicPath:', publicPath);
-console.log('[Debug] admin.html path:', path.join(publicPath, 'admin.html'));
+// <-- Configuración estricta de seguridad CORS añadida
+app.use(cors({
+    origin: 'https://ecupanel.ecuentrega.com',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-admin-key']
+}));
+
 
 app.use(
     express.json({
@@ -17,16 +23,6 @@ app.use(
         },
     })
 );
-
-// ── Panel admin (HTML estático protegido) ─────────────────────────────────────
-app.get('/panelbot', (_req: Request, res: Response) => {
-    res.sendFile(path.join(publicPath, 'admin.html'), (err) => {
-        if (err) {
-            console.error('[Debug] sendFile error:', err.message);
-            res.status(500).json({ error: 'No se encontró admin.html', path: publicPath });
-        }
-    });
-});
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 app.get('/', (_req: Request, res: Response) => {
