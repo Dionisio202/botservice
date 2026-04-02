@@ -7,8 +7,7 @@ import { TransformInterceptor } from './shared/interceptors/transform.intercepto
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 
 async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create(AppModule);
-
+const app = await NestFactory.create(AppModule, { rawBody: true });
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     app.useGlobalInterceptors(new TransformInterceptor());
     app.useGlobalFilters(new HttpExceptionFilter());
