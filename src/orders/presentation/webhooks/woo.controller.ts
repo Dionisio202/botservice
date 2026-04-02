@@ -6,15 +6,13 @@ import type { WooOrderDto } from '../../application/dtos/order.dto';
 export class WooController {
     constructor(private readonly processOrderUseCase: ProcessOrderUseCase) {}
 
-   @Post()
+ @Post()
 @HttpCode(200)
 async handle(
     @Body() body: WooOrderDto,
     @Headers('x-wc-webhook-signature') signature: string,
 ): Promise<void> {
-    if (process.env.NODE_ENV === 'production') {
-        this.verifySignature(JSON.stringify(body), signature);
-    }
+    this.verifySignature(JSON.stringify(body), signature);
     await this.processOrderUseCase.execute(body);
 }
 
