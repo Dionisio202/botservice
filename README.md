@@ -1,191 +1,98 @@
-# Bot WhatsApp COD — WooCommerce
+<p align="center">
+  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+</p>
 
-Bot de confirmación de pedidos contraentrega (COD) sin IA, optimizado para dropshipping.
+[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
+[circleci-url]: https://circleci.com/gh/nestjs/nest
 
-## Arquitectura de costo
+  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
+    <p align="center">
+<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
+<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
+<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
+<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
+<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
+<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
+<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
+  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
+    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
+  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+</p>
+  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
+  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-| Componente          | Costo            |
-|---------------------|------------------|
-| IA (Gemini/GPT)     | **$0** — no se usa |
-| Procesamiento       | **$0** — keywords simples |
-| Meta API            | ~$0.05 por conversación de 24h |
-| MySQL               | $0 — tabla en tu BD de WooCommerce |
+## Description
 
----
+[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
-## Flujo de conversación
-
-```
-WooCommerce orden nueva
-        ↓
-[GUARDIA 1] ¿Teléfono en blacklist? → SÍ → Notifica y bloquea
-        ↓ NO
-[GUARDIA 2] ¿Tiene 2+ pedidos pendientes? → SÍ → Notifica y para
-        ↓ NO
-Crea sesión en bot_order_sessions
-        ↓
-Envía template de WhatsApp con botones:
-[✅ Confirmar] [✏️ Modificar] [❌ Cancelar]
-        ↓
-Cliente responde...
-
-─── CONFIRMAR ──────────────────────────────
-→ WooCommerce: status = processing
-→ Bot: mensaje de confirmación
-→ Sesión: confirmed
-
-─── MODIFICAR ──────────────────────────────
-→ Bot: "¿Qué deseas modificar? 1) Dirección 2) Ciudad"
-→ Cliente elige
-→ Bot: "Escríbeme el nuevo valor"
-→ Cliente escribe
-→ Bot: muestra resumen con los cambios
-→ Cliente responde SÍ/NO
-  SÍ → actualiza WooCommerce + confirmed
-  NO → vuelve a preguntar qué modificar
-
-─── CANCELAR ───────────────────────────────
-→ WooCommerce: status = cancelled
-→ Bot: mensaje de cancelación
-→ Sesión: cancelled
-→ Historial: +1 cancelación (si llega al umbral → blacklist)
-
-─── SIN RESPUESTA ──────────────────────────
-→ Scheduler (cada hora) revisa next_retry_at
-→ Si llegó el momento: reenvía recordatorio de texto
-→ Tras max_attempts sin respuesta: cancela pedido en WC → expired
-```
-
----
-
-## Protección anti-abuso
-
-- **Blacklist**: cliente que cancela 3+ veces en 30 días → bloqueado automáticamente
-- **Límite de pendientes**: máx 2 pedidos sin confirmar al mismo tiempo por cliente
-- Ambos valores son configurables en `.env`
-
----
-
-## Instalación en Hostinger
-
-### 1. Subir archivos
+## Project setup
 
 ```bash
-# Por SSH o panel de Hostinger
-cd /home/tu_usuario/public_html/bot  # o el subdomain que tengas
-git clone <tu-repo> .
-pnpm install  # o npm install
-pnpm build
+$ pnpm install
 ```
 
-### 2. Crear las tablas en MySQL
-
-En phpMyAdmin de Hostinger, ejecuta el archivo:
-```
-migrations/001_bot_tables.sql
-```
-
-### 3. Configurar variables de entorno
+## Compile and run the project
 
 ```bash
-cp src/.env.example .env
-nano .env
-# Rellena todos los valores
+# development
+$ pnpm run start
+
+# watch mode
+$ pnpm run start:dev
+
+# production mode
+$ pnpm run start:prod
 ```
 
-### 4. Configurar WooCommerce Webhook
+## Run tests
 
-En tu WP admin:
-- WooCommerce → Ajustes → Avanzado → Webhooks → Añadir webhook
-- Nombre: `Bot Confirmación Pedidos`
-- Estado: Activo
-- Tema: **Pedido creado**
-- URL de entrega: `https://bot.tudominio.com/webhook-woocommerce`
-- Versión API: WP REST API Integration v3
-- Copia el "Secreto" al `.env` como `WC_WEBHOOK_SECRET`
+```bash
+# unit tests
+$ pnpm run test
 
-### 5. Configurar Meta Webhook
+# e2e tests
+$ pnpm run test:e2e
 
-En Meta for Developers → Tu app → WhatsApp → Configuration:
-- Callback URL: `https://bot.tudominio.com/webhook-meta`
-- Verify token: el mismo que pusiste en `META_WEBHOOK_VERIFY_TOKEN`
-- Suscribir a: `messages`
-
-### 6. Crear el template en Meta Business Manager
-
-Ve a WhatsApp Manager → Plantillas de mensajes → Crear plantilla
-
-**Categoría:** Utility (transaccional, no marketing — más barato)
-
-**Nombre:** `confirmar_pedido`
-
-**Cuerpo del mensaje:**
-```
-CONFIRMA TU PEDIDO
-
-¡Hola, {{1}}! 😊 Soy {{2}}, de la tienda {{3}}.
-
-Aquí los detalles de tu compra:
-
-📦 Pedido #{{4}}
-🌟 Producto(s): {{5}}
-💵 Total a pagar: {{6}}
-📍 Dirección de envío: {{7}}
-
-❗ No enviamos sin confirmación previa. Por favor verifica que todo está correcto.
-
-🚚 Envío gratuito. Pago contraentrega.
+# test coverage
+$ pnpm run test:cov
 ```
 
-**Botones (Quick Reply):**
-- Botón 1: `✅ Confirmar` → payload: `CONFIRM`
-- Botón 2: `✏️ Modificar datos` → payload: `MODIFY`
-- Botón 3: `❌ Cancelar pedido` → payload: `CANCEL`
+## Deployment
 
-### 7. Crear claves API de WooCommerce
+When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
-WooCommerce → Ajustes → Avanzado → REST API → Añadir clave
-- Descripción: `Bot WhatsApp`
-- Usuario: admin
-- Permisos: **Lectura/Escritura**
-- Copia Consumer key y secret al `.env`
+If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
 
----
-
-## Variables de entorno clave
-
-| Variable | Descripción | Default |
-|---|---|---|
-| `BOT_MAX_ATTEMPTS` | Reintentos máximos | 2 |
-| `BOT_RETRY_DELAY_HOURS` | Horas entre intentos | 24 |
-| `BOT_SESSION_EXPIRE_HOURS` | Horas para expirar | 48 |
-| `BOT_MAX_PENDING_PER_CUSTOMER` | Pedidos pendientes máx | 2 |
-| `BOT_BLACKLIST_THRESHOLD` | Cancelaciones para blacklist | 3 |
-| `BOT_BLACKLIST_WINDOW_DAYS` | Ventana de días para blacklist | 30 |
-| `BOT_AGENT_NAME` | Nombre del bot | Camila |
-| `STORE_NAME` | Nombre de la tienda | Equilibrium |
-
----
-
-## Estructura del proyecto
-
+```bash
+$ pnpm install -g @nestjs/mau
+$ mau deploy
 ```
-src/
-├── index.ts                          ← Servidor Express + rutas
-├── controllers/
-│   ├── WooWebhookController.ts       ← Recibe pedidos de WooCommerce
-│   └── MetaWebhookController.ts      ← Recibe mensajes de clientes
-├── services/
-│   ├── BotEngine.ts                  ← Lógica del flujo (sin IA)
-│   ├── WhatsAppService.ts            ← Meta API + plantillas de texto
-│   ├── WooCommerceService.ts         ← WooCommerce REST API
-│   └── RetryScheduler.ts            ← Scheduler de reintentos
-├── repositories/
-│   ├── BotSessionRepository.ts       ← CRUD bot_order_sessions
-│   └── CustomerHistoryRepository.ts  ← CRUD bot_customer_history
-└── shared/
-    ├── dtos/index.ts                 ← Tipos TypeScript
-    └── database/db.ts                ← Pool MySQL
-migrations/
-└── 001_bot_tables.sql                ← Ejecutar en phpMyAdmin
-```
+
+With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+
+## Resources
+
+Check out a few resources that may come in handy when working with NestJS:
+
+- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
+- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
+- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
+- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
+- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
+- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
+- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
+- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+
+## Support
+
+Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+
+## Stay in touch
+
+- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
+- Website - [https://nestjs.com](https://nestjs.com/)
+- Twitter - [@nestframework](https://twitter.com/nestframework)
+
+## License
+
+Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

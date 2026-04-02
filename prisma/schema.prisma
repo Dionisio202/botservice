@@ -1,0 +1,233 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ── 1. USUARIOS DEL PANEL ─────────────────────────────────────────────────────
+model PanelUser {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique @db.VarChar(50)
+  password_hash String    @db.VarChar(255)
+  role          UserRole  @default(agent)
+  is_active     Boolean   @default(true)
+  last_login_at DateTime?
+  created_at    DateTime  @default(now())
+
+  blacklisted_customers BotCustomer[]     @relation("BlacklistedBy")
+  resolved_sessions     BotOrderSession[] @relation("ResolvedBy")
+  templates_created     WaTemplate[]      @relation("TemplateCreatedBy")
+  templates_updated     WaTemplate[]      @relation("TemplateUpdatedBy")
+  messages_sent         WaMessage[]       @relation("MessageSentBy")
+  quick_replies_created WaQuickReply[]    @relation("QuickReplyCreatedBy")
+  quick_replies_updated WaQuickReply[]    @relation("QuickReplyUpdatedBy")
+
+  @@index([username])
+  @@map("panel_users")
+}
+
+// ── 2. CLIENTES ───────────────────────────────────────────────────────────────
+model BotCustomer {
+  id                  Int       @id @default(autoincrement())
+  phone               String    @unique @db.VarChar(20)
+  customer_name       String?   @db.VarChar(100)
+  total_orders        Int       @default(0)
+  confirmed_orders    Int       @default(0)
+  cancelled_orders    Int       @default(0)
+  shipped_orders      Int       @default(0)
+  delivered_orders    Int       @default(0)
+  returned_orders     Int       @default(0)
+  lost_orders         Int       @default(0)
+  expired_sessions    Int       @default(0)
+  total_lost_amount   Decimal   @default(0.00) @db.Decimal(10, 2)
+  is_blacklisted      Boolean   @default(false)
+  blacklist_reason    String?   @db.VarChar(255)
+  blacklisted_at      DateTime?
+  blacklisted_by      Int?
+  recent_cancels_json Json?
+  first_order_at      DateTime  @default(now())
+  last_order_at       DateTime  @default(now())
+
+  blacklisted_by_user PanelUser?        @relation("BlacklistedBy", fields: [blacklisted_by], references: [id], onDelete: SetNull)
+  order_sessions      BotOrderSession[]
+  messages            WaMessage[]
+
+  @@index([phone])
+  @@index([is_blacklisted])
+  @@index([lost_orders])
+  @@map("bot_customers")
+}
+
+// ── 3. SESIONES DE ÓRDENES ────────────────────────────────────────────────────
+model BotOrderSession {
+  id                Int         @id @default(autoincrement())
+  order_id          Int         @unique
+  customer_id       Int
+  customer_name     String?     @db.VarChar(100)
+  order_total       Decimal?    @db.Decimal(10, 2)
+  order_items       Json?
+  loss_amount       Decimal?    @db.Decimal(10, 2)
+  status            OrderStatus @default(pending)
+  attempts          Int         @default(0)
+  max_attempts      Int         @default(2)
+  next_retry_at     DateTime?
+  retry_delay_hours Int         @default(24)
+  conv_step         ConvStep    @default(awaiting_action)
+  pending_changes   Json?
+  wa_message_id     String?     @db.VarChar(100)
+  resolved_by       Int?
+  shipped_at        DateTime?
+  delivered_at      DateTime?
+  cancelled_at      DateTime?
+  returned_at       DateTime?
+  lost_at           DateTime?
+  expired_at        DateTime?
+  created_at        DateTime    @default(now())
+  updated_at        DateTime    @updatedAt
+
+  customer         BotCustomer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  resolved_by_user PanelUser?  @relation("ResolvedBy", fields: [resolved_by], references: [id], onDelete: SetNull)
+  messages         WaMessage[]
+
+  @@index([customer_id])
+  @@index([status])
+  @@index([next_retry_at])
+  @@index([loss_amount])
+  @@map("bot_order_sessions")
+}
+
+// ── 4. TEMPLATES DE WHATSAPP ──────────────────────────────────────────────────
+model WaTemplate {
+  id               Int              @id @default(autoincrement())
+  name             String           @db.VarChar(100)
+  wa_template_name String           @unique @db.VarChar(100)
+  category         TemplateCategory @default(utility)
+  language         String           @default("es") @db.VarChar(10)
+  body             String           @db.Text
+  variables        Json?
+  is_active        Boolean          @default(true)
+  created_by       Int?
+  updated_by       Int?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  created_by_user PanelUser?  @relation("TemplateCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  updated_by_user PanelUser?  @relation("TemplateUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+  messages        WaMessage[]
+
+  @@index([is_active])
+  @@map("wa_templates")
+}
+
+// ── 5. MENSAJES TEMPORALES (48h) ──────────────────────────────────────────────
+model WaMessage {
+  id               Int           @id @default(autoincrement())
+  customer_id      Int
+  order_session_id Int?
+  wa_message_id    String?       @unique @db.VarChar(100)
+  direction        Direction
+  msg_type         MessageType   @default(text)
+  content          String        @db.Text
+  template_id      Int?
+  sent_by          Int?
+  status           MessageStatus @default(received)
+  expires_at       DateTime
+  created_at       DateTime      @default(now())
+
+  customer      BotCustomer      @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  order_session BotOrderSession? @relation(fields: [order_session_id], references: [id], onDelete: SetNull)
+  template      WaTemplate?      @relation(fields: [template_id], references: [id], onDelete: SetNull)
+  sent_by_user  PanelUser?       @relation("MessageSentBy", fields: [sent_by], references: [id], onDelete: SetNull)
+
+  @@index([customer_id])
+  @@index([order_session_id])
+  @@index([expires_at])
+  @@index([status])
+  @@map("wa_messages")
+}
+
+// ── 6. RESPUESTAS RÁPIDAS ─────────────────────────────────────────────────────
+model WaQuickReply {
+  id         Int      @id @default(autoincrement())
+  title      String   @db.VarChar(100)
+  content    String   @db.Text
+  category   String?  @db.VarChar(50)
+  is_active  Boolean  @default(true)
+  created_by Int?
+  updated_by Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  created_by_user PanelUser? @relation("QuickReplyCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  updated_by_user PanelUser? @relation("QuickReplyUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([is_active])
+  @@map("wa_quick_replies")
+}
+
+// ── 7. BASE DE CONOCIMIENTO ───────────────────────────────────────────────────
+model BotKnowledgeBase {
+  id         Int      @id @default(autoincrement())
+  topic      String   @db.VarChar(100)
+  content    String   @db.Text
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  @@map("bot_knowledge_base")
+}
+
+// ── ENUMS ─────────────────────────────────────────────────────────────────────
+enum UserRole {
+  admin
+  agent
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  shipped
+  delivered
+  cancelled
+  returned
+  lost
+  expired
+}
+
+enum ConvStep {
+  awaiting_action
+  awaiting_modify_field
+  awaiting_new_address
+  awaiting_new_city
+  awaiting_confirm_changes
+  done
+}
+
+enum TemplateCategory {
+  marketing
+  utility
+  authentication
+}
+
+enum Direction {
+  inbound
+  outbound
+}
+
+enum MessageType {
+  text
+  template
+  interactive
+  media
+}
+
+enum MessageStatus {
+  sent
+  delivered
+  read
+  failed
+  received
+}
