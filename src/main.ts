@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -9,7 +9,7 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 async function bootstrap(): Promise<void> {
 const app = await NestFactory.create(AppModule, { rawBody: true });
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
-    app.useGlobalInterceptors(new TransformInterceptor());
+app.useGlobalInterceptors(new TransformInterceptor(new Reflector()));
     app.useGlobalFilters(new HttpExceptionFilter());
     app.enableCors({ origin: process.env.CORS_ORIGIN });
 

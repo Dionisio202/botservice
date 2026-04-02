@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Query, Headers, HttpCode, UnauthorizedException } from '@nestjs/common';
 import { ReceiveMessageUseCase } from '../../application/usecases/receive-message.usecase';
+import { SkipTransform } from '../../../shared/decorators/skip-transform.decorator';
 
 interface MetaWebhookBody {
     object: string;
@@ -24,10 +25,11 @@ export class MetaController {
     constructor(private readonly receiveMessageUseCase: ReceiveMessageUseCase) {}
 
     @Get()
+    @SkipTransform()
     verify(
-        @Query('hub.mode')        mode:      string,
-        @Query('hub.verify_token') token:    string,
-        @Query('hub.challenge')   challenge: string,
+        @Query('hub.mode')         mode:      string,
+        @Query('hub.verify_token') token:     string,
+        @Query('hub.challenge')    challenge: string,
     ): string {
         if (mode === 'subscribe' && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
             return challenge;
