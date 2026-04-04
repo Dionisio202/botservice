@@ -7,24 +7,26 @@ import { Message } from '../../domain/entities/message.entity';
 export class PrismaMessageRepository implements IMessageRepository {
     constructor(private readonly prisma: PrismaService) {}
 
-    async create(data: CreateMessageData): Promise<Message> {
-        const expireHours = Number(process.env.BOT_SESSION_EXPIRE_HOURS ?? 48);
-        const expiresAt   = new Date(Date.now() + expireHours * 60 * 60 * 1000);
-        const row = await this.prisma.waMessage.create({
-            data: {
-                customer_id:      data.customer_id,
-                order_session_id: data.order_session_id,
-                wa_message_id:    data.wa_message_id,
-                direction:        data.direction,
-                msg_type:         data.msg_type,
-                content:          data.content,
-                template_id:      data.template_id,
-                sent_by:          data.sent_by,
-                expires_at:       expiresAt,
-            },
-        });
-        return this.toEntity(row);
-    }
+  async create(data: CreateMessageData): Promise<Message> {
+    const expireHours = Number(process.env.BOT_SESSION_EXPIRE_HOURS ?? 48);
+    const expiresAt   = new Date(Date.now() + expireHours * 60 * 60 * 1000);
+    const row = await this.prisma.waMessage.create({
+        data: {
+            customer_id:      data.customer_id,
+            order_session_id: data.order_session_id,
+            wa_message_id:    data.wa_message_id,
+            direction:        data.direction,
+            msg_type:         data.msg_type,
+            content:          data.content,
+            template_id:      data.template_id,
+            sent_by:          data.sent_by,
+            expires_at:       expiresAt,
+            media_url:        data.media_url,
+            media_type:       data.media_type,
+        },
+    });
+    return this.toEntity(row);
+}
 
     async findByOrderSession(orderSessionId: number): Promise<Message[]> {
         const rows = await this.prisma.waMessage.findMany({
