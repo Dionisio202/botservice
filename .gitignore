@@ -28,3 +28,6 @@ prisma/*.db-journal
 
 # Coverage
 coverage/
+
+public/media/*
+!public/media/.gitkeep

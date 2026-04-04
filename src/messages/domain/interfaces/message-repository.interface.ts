@@ -16,4 +16,6 @@ export interface CreateMessageData {
     content:          string;
     template_id?:     number;
     sent_by?:         number;
+    media_url?:       string;
+    media_type?:      'image' | 'document' | 'video';
 }

@@ -8,6 +8,7 @@ import { TemplatesController } from './presentation/controller/templates.control
 import { QuickRepliesController } from './presentation/controller/quick-replies.controller';
 import { SendTemplateUseCase } from './application/usecases/send-template.usecase';
 import { SendQuickReplyUseCase } from './application/usecases/send-quick-reply.usecase';
+import { SendMediaUseCase } from './application/usecases/send-media.usecase';
 import { ReceiveMessageUseCase } from './application/usecases/receive-message.usecase';
 import { CleanExpiredUseCase } from './application/usecases/clean-expired.usecase';
 import { BotEngineService } from './infrastructure/adapters/bot-engine.service';
@@ -25,6 +26,7 @@ import { OrderCreatedListener } from './application/listeners/order-created.list
     providers: [
         SendTemplateUseCase,
         SendQuickReplyUseCase,
+        SendMediaUseCase,
         ReceiveMessageUseCase,
         CleanExpiredUseCase,
         BotEngineService,

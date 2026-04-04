@@ -13,4 +13,5 @@ buildConfirmedMessage(firstName: string, orderId: string): string;
     buildUnrecognizedMessage(): string;
     buildBlockedMessage(): string;
     buildMainMenu(firstName: string): string;
+    sendMedia(phone: string, mediaUrl: string, type: 'image' | 'document', caption?: string): Promise<void>;
 }

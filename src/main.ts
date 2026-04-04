@@ -1,15 +1,20 @@
 import 'dotenv/config';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 
 async function bootstrap(): Promise<void> {
-const app = await NestFactory.create(AppModule, { rawBody: true });
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+    app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/media' });
+
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
-app.useGlobalInterceptors(new TransformInterceptor(new Reflector()));
+    app.useGlobalInterceptors(new TransformInterceptor(new Reflector()));
     app.useGlobalFilters(new HttpExceptionFilter());
     app.enableCors({ origin: process.env.CORS_ORIGIN });
 

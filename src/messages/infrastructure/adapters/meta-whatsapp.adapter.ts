@@ -33,7 +33,17 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         }
         return res.json() as Promise<T>;
     }
-
+async sendMedia(phone: string, mediaUrl: string, type: 'image' | 'document', caption?: string): Promise<void> {
+    await this.post({
+        messaging_product: 'whatsapp',
+        to:   normalizePhone(phone),
+        type,
+        [type]: {
+            link:    mediaUrl,
+            caption: caption ?? '',
+        },
+    });
+}
     async sendConfirmationTemplate(order: WooOrderDto, phone: string): Promise<string> {
         const productList = order.line_items.map((i) => `• ${i.name} x${i.quantity}`).join('\n');
 

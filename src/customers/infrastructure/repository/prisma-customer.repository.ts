@@ -87,7 +87,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
     lost_orders: number; cancelled_orders: number;
     is_blacklisted: boolean; total_lost_amount: unknown;
     confirmed_orders: number; expired_sessions: number;
-    customer_tier: string;
+    customer_tier: string; manually_trusted: boolean;
 }): Customer {
     return new Customer(
         row.id,
@@ -100,6 +100,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         row.confirmed_orders,
         row.expired_sessions,
         row.customer_tier,
+        row.manually_trusted,
     );
 }
     async unblacklist(id: number): Promise<void> {

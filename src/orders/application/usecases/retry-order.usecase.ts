@@ -5,6 +5,9 @@ import type { ICustomerRepository } from '../../../customers/domain/interfaces/c
 import type { IWhatsAppAdapter } from '../../../messages/domain/interfaces/whatsapp-adapter.interface';
 import type { WooOrderDto } from '../dtos/order.dto';
 
+const TIER_MAX_ATTEMPTS = { new: 1, regular: 2, loyal: 2 } as const;
+type CustomerTier = keyof typeof TIER_MAX_ATTEMPTS;
+
 @Injectable()
 export class RetryOrderUseCase {
     constructor(
@@ -29,6 +32,15 @@ export class RetryOrderUseCase {
 
         await Promise.allSettled(
             sessions.map(async (session) => {
+                const customer = await this.customerRepo.findByPhone(session.phone);
+
+                if (customer?.manually_trusted === false && customer?.is_blacklisted) return;
+
+                const tier        = (customer?.customer_tier as CustomerTier) ?? 'new';
+                const maxAttempts = TIER_MAX_ATTEMPTS[tier] ?? 1;
+
+                if (session.attempts >= maxAttempts) return;
+
                 const fakeOrder: WooOrderDto = {
                     id:         session.order_id,
                     total:      String(session.order_total),
@@ -37,6 +49,7 @@ export class RetryOrderUseCase {
                     shipping:   { address_1: '', city: '' },
                     line_items: [],
                 };
+
                 const text = this.whatsApp.buildRetryMessage('', fakeOrder);
                 await this.whatsApp.sendText(session.phone, text);
                 await this.orderRepo.markAttemptSent(session.order_id, `retry_${Date.now()}`);
@@ -49,6 +62,13 @@ export class RetryOrderUseCase {
 
         await Promise.allSettled(
             sessions.map(async (session) => {
+                const customer = await this.customerRepo.findByPhone(session.phone);
+
+                const tier        = (customer?.customer_tier as CustomerTier) ?? 'new';
+                const maxAttempts = TIER_MAX_ATTEMPTS[tier] ?? 1;
+
+                if (session.attempts < maxAttempts) return;
+
                 await this.orderRepo.updateStatus(session.order_id, 'expired');
                 await this.customerRepo.recordExpired(session.phone);
             })
