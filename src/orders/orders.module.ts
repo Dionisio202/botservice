@@ -4,6 +4,7 @@ import { CustomersModule } from '../customers/customers.module';
 import { OrdersController } from './presentation/controller/orders.controller';
 import { WooController } from './presentation/webhooks/woo.controller';
 import { ProcessOrderUseCase } from './application/usecases/process-order.usecase';
+import { ProcessOrderUpdateUseCase } from './application/usecases/process-order-update.usecase';
 import { ConfirmOrderUseCase } from './application/usecases/confirm-order.usecase';
 import { CancelOrderUseCase } from './application/usecases/cancel-order.usecase';
 import { RetryOrderUseCase } from './application/usecases/retry-order.usecase';
@@ -16,16 +17,17 @@ import { MetaWhatsAppAdapter } from '../messages/infrastructure/adapters/meta-wh
     controllers: [OrdersController, WooController],
     providers: [
         ProcessOrderUseCase,
+        ProcessOrderUpdateUseCase,
         ConfirmOrderUseCase,
         CancelOrderUseCase,
         RetryOrderUseCase,
-            { provide: 'IWhatsAppAdapter', useClass: MetaWhatsAppAdapter },
-
+        { provide: 'IWhatsAppAdapter',    useClass: MetaWhatsAppAdapter },
         { provide: 'IOrderRepository',    useClass: PrismaOrderRepository },
         { provide: 'ICustomerRepository', useClass: PrismaCustomerRepository },
     ],
     exports: [
         ProcessOrderUseCase,
+        ProcessOrderUpdateUseCase,
         ConfirmOrderUseCase,
         CancelOrderUseCase,
         { provide: 'IOrderRepository',    useClass: PrismaOrderRepository },

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import type { IOrderRepository, CreateOrderData } from '../../domain/interfaces/order-repository.interface';
 import { Order, OrderStatus, ConvStep } from '../../domain/entities/order.entity';
-
+import { Prisma } from '@prisma/client';
 @Injectable()
 export class PrismaOrderRepository implements IOrderRepository {
     constructor(private readonly prisma: PrismaService) {}
@@ -15,18 +15,32 @@ export class PrismaOrderRepository implements IOrderRepository {
         return this.toEntity(row);
     }
 
-    async findActivePendingByPhone(phone: string): Promise<(Order & { phone: string; pending_changes: Record<string, string> }) | null> {
-        const row = await this.prisma.botOrderSession.findFirst({
-            where:   { status: 'pending', customer: { phone } },
-            include: { customer: true },
-        });
-        if (!row) return null;
+    async findActivePendingByPhone(phone: string): Promise<(Order & { phone: string; pending_changes: Record<string, unknown>; unrecognized_count: number }) | null> {
+    const row = await this.prisma.botOrderSession.findFirst({
+        where:   { status: 'pending', customer: { phone } },
+        include: { customer: true },
+    });
+    if (!row) return null;
 
-        return Object.assign(this.toEntity(row), {
-            phone:           row.customer.phone,
-            pending_changes: (row.pending_changes as Record<string, string>) ?? {},
-        });
-    }
+    return Object.assign(this.toEntity(row), {
+        phone:              row.customer.phone,
+        pending_changes:    (row.pending_changes as Record<string, unknown>) ?? {},
+        unrecognized_count: row.unrecognized_count ?? 0,
+    });
+}
+async saveRating(orderId: number, rating: number): Promise<void> {
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  { rating, conv_step: 'done' },
+    });
+}
+
+async incrementUnrecognized(orderId: number): Promise<void> {
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  { unrecognized_count: { increment: 1 } },
+    });
+}
 
     async findPendingRetries(): Promise<Array<Order & { phone: string }>> {
         const retryDelay = Number(process.env.BOT_RETRY_DELAY_HOURS ?? 24);
@@ -75,14 +89,32 @@ export class PrismaOrderRepository implements IOrderRepository {
             data:  { status, updated_at: new Date() },
         });
     }
-
-    async updateConvStep(orderId: number, step: ConvStep, pendingChanges: Record<string, string>): Promise<void> {
-        await this.prisma.botOrderSession.update({
-            where: { order_id: orderId },
-            data:  { conv_step: step, pending_changes: pendingChanges },
-        });
-    }
-
+async countPendingByPhone(phone: string): Promise<number> {
+    return this.prisma.botOrderSession.count({
+        where: { status: 'pending', customer: { phone } },
+    });
+}
+async findLastSessionByPhone(phone: string): Promise<(Order & { phone: string }) | null> {
+    const row = await this.prisma.botOrderSession.findFirst({
+        where:   { customer: { phone } },
+        include: { customer: true },
+        orderBy: { created_at: 'desc' },
+    });
+    if (!row) return null;
+    return Object.assign(this.toEntity(row), { phone: row.customer.phone });
+}
+async updateConvStep(orderId: number, step: ConvStep, pendingChanges: Record<string, unknown>): Promise<void> {
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  { conv_step: step, pending_changes: pendingChanges as Prisma.InputJsonValue },
+    });
+}
+async setReviewRequestedAt(orderId: number): Promise<void> {
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  { review_requested_at: new Date() },
+    });
+}
     async markAttemptSent(orderId: number, messageId: string): Promise<void> {
         await this.prisma.botOrderSession.update({
             where: { order_id: orderId },

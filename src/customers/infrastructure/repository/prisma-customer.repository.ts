@@ -42,15 +42,24 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         });
     }
 
-    async recordConfirmed(phone: string): Promise<void> {
-        await this.prisma.botCustomer.update({
-            where: { phone },
-            data:  {
-                confirmed_orders: { increment: 1 },
-                last_order_at:    new Date(),
-            },
-        });
-    }
+  async recordConfirmed(phone: string): Promise<void> {
+    const updated = await this.prisma.botCustomer.update({
+        where: { phone },
+        data:  {
+            confirmed_orders: { increment: 1 },
+            last_order_at:    new Date(),
+        },
+    });
+
+    const tier = updated.confirmed_orders >= 3 ? 'loyal'
+               : updated.confirmed_orders >= 1 ? 'regular'
+               : 'new';
+
+    await this.prisma.botCustomer.update({
+        where: { phone },
+        data:  { customer_tier: tier },
+    });
+}
 
     async recordExpired(phone: string): Promise<void> {
         await this.prisma.botCustomer.update({
@@ -73,21 +82,26 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         });
     }
 
-    private toEntity(row: {
-        id: number; phone: string; customer_name: string | null;
-        lost_orders: number; cancelled_orders: number;
-        is_blacklisted: boolean; total_lost_amount: unknown;
-    }): Customer {
-        return new Customer(
-            row.id,
-            row.phone,
-            row.customer_name,
-            row.lost_orders,
-            row.cancelled_orders,
-            row.is_blacklisted,
-            Number(row.total_lost_amount),
-        );
-    }
+   private toEntity(row: {
+    id: number; phone: string; customer_name: string | null;
+    lost_orders: number; cancelled_orders: number;
+    is_blacklisted: boolean; total_lost_amount: unknown;
+    confirmed_orders: number; expired_sessions: number;
+    customer_tier: string;
+}): Customer {
+    return new Customer(
+        row.id,
+        row.phone,
+        row.customer_name,
+        row.lost_orders,
+        row.cancelled_orders,
+        row.is_blacklisted,
+        Number(row.total_lost_amount),
+        row.confirmed_orders,
+        row.expired_sessions,
+        row.customer_tier,
+    );
+}
     async unblacklist(id: number): Promise<void> {
     await this.prisma.botCustomer.update({
         where: { id },
@@ -96,6 +110,15 @@ export class PrismaCustomerRepository implements ICustomerRepository {
             blacklist_reason: null,
             blacklisted_at:   null,
             blacklisted_by:   null,
+        },
+    });
+}
+async flagAgentReview(phone: string, reason: string): Promise<void> {
+    await this.prisma.botCustomer.update({
+        where: { phone },
+        data:  {
+            needs_agent_review:  true,
+            agent_review_reason: reason,
         },
     });
 }

@@ -1,6 +1,16 @@
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'lost' | 'expired';
-export type ConvStep = 'awaiting_action' | 'awaiting_modify_field' | 'awaiting_new_address' | 'awaiting_new_city' | 'awaiting_confirm_changes' | 'done';
-
+export type ConvStep =
+    | 'awaiting_action'
+    | 'awaiting_modify_field'
+    | 'awaiting_new_address'
+    | 'awaiting_new_city'
+    | 'awaiting_new_province'
+    | 'awaiting_new_name'
+    | 'awaiting_new_phone'
+    | 'awaiting_new_quantity'
+    | 'awaiting_confirm_changes'
+    | 'awaiting_review'
+    | 'done';
 export class Order {
     constructor(
         public readonly id:           number,

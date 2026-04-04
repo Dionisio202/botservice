@@ -3,6 +3,7 @@ import type { IOrderRepository } from '../../../orders/domain/interfaces/order-r
 import type { ICustomerRepository } from '../../../customers/domain/interfaces/customer-repository.interface';
 import type { IWhatsAppAdapter } from '../../domain/interfaces/whatsapp-adapter.interface';
 import type { WooOrderDto } from '../../../orders/application/dtos/order.dto';
+import { normalizePhone } from '../../../orders/infrastructure/utils/phone.utils';
 
 function normalize(text: string): string {
     return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -19,6 +20,8 @@ const CANCEL_KW  = ['cancelar', 'cancelo', 'cancel', 'no quiero', 'anular']     
 const YES_KW     = ['si', 'ok', 'dale', 'listo', 'correcto', 'yes', 'confirmo', 'confirmar']           as const;
 const NO_KW      = ['no', 'nope', 'negativo']                                                           as const;
 
+type Session = Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object;
+
 @Injectable()
 export class BotEngineService {
     constructor(
@@ -31,35 +34,80 @@ export class BotEngineService {
     ) {}
 
     async processIncomingMessage(phone: string, text: string, buttonPayload?: string): Promise<void> {
-        const session = await this.orderRepo.findActivePendingByPhone(phone);
-        if (!session) return;
+    const customer = await this.customerRepo.findByPhone(phone);
 
-        const input = buttonPayload ?? text;
+    if (customer?.is_blacklisted) return;
 
-        switch (session.conv_step) {
-            case 'awaiting_action':
-                await this.handleMainAction(session, input, phone);
-                break;
-            case 'awaiting_modify_field':
-                await this.handleModifyField(session, input, phone);
-                break;
-            case 'awaiting_new_address':
-                await this.handleNewAddress(session, input, phone);
-                break;
-            case 'awaiting_new_city':
-                await this.handleNewCity(session, input, phone);
-                break;
-            case 'awaiting_confirm_changes':
-                await this.handleConfirmChanges(session, input, phone);
-                break;
-        }
+    const session = await this.orderRepo.findActivePendingByPhone(phone);
+
+    if (!session) {
+        await this.handleNoSession(phone, customer);
+        return;
     }
 
-    private async handleMainAction(
-        session: Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object,
-        input:   string,
-        phone:   string,
-    ): Promise<void> {
+    const input = buttonPayload ?? text;
+
+    switch (session.conv_step) {
+        case 'awaiting_action':
+            await this.handleMainAction(session, input, phone);
+            break;
+        case 'awaiting_modify_field':
+            await this.handleModifyField(session, input, phone);
+            break;
+        case 'awaiting_new_address':
+            await this.handleNewAddress(session, input, phone);
+            break;
+        case 'awaiting_new_city':
+            await this.handleNewCity(session, input, phone);
+            break;
+        case 'awaiting_new_province':
+            await this.handleNewProvince(session, input, phone);
+            break;
+        case 'awaiting_new_name':
+            await this.handleNewName(session, input, phone);
+            break;
+        case 'awaiting_new_phone':
+            await this.handleNewPhone(session, input, phone);
+            break;
+        case 'awaiting_new_quantity':
+            await this.handleNewQuantity(session, input, phone);
+            break;
+        case 'awaiting_confirm_changes':
+            await this.handleConfirmChanges(session, input, phone);
+            break;
+        case 'awaiting_review':
+            await this.handleReview(session, input, phone);
+            break;
+    }
+}
+
+private async handleNoSession(
+    phone: string,
+    customer: Awaited<ReturnType<ICustomerRepository['findByPhone']>> | null,
+): Promise<void> {
+    if (!customer) return;
+
+    const lastSession = await this.orderRepo.findLastSessionByPhone(phone);
+    if (!lastSession) return;
+
+    if (lastSession.status === 'expired') {
+        await this.whatsApp.sendText(
+            phone,
+            `Tu pedido #${lastSession.order_id} ya expiró ⏰.\nSi deseas realizar uno nuevo, visita nuestra tienda.`,
+        );
+        return;
+    }
+
+    if (lastSession.status === 'cancelled') {
+        await this.whatsApp.sendText(
+            phone,
+            `Tu pedido #${lastSession.order_id} fue cancelado ❌.\nPuedes realizar un nuevo pedido cuando gustes 🌿`,
+        );
+        return;
+    }
+}
+
+    private async handleMainAction(session: Session, input: string, phone: string): Promise<void> {
         if (input === 'CONFIRM' || matches(input, CONFIRM_KW)) {
             await this.orderRepo.updateStatus(session!.order_id, 'confirmed');
             await this.customerRepo.recordConfirmed(phone);
@@ -79,12 +127,14 @@ export class BotEngineService {
         }
     }
 
-    private async handleModifyField(
-        session: Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object,
-        input:   string,
-        phone:   string,
-    ): Promise<void> {
+    private async handleModifyField(session: Session, input: string, phone: string): Promise<void> {
         const n = normalize(input);
+
+        if (n === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
 
         if (n === '1' || n.includes('direcc') || n.includes('calle')) {
             await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_address', session!.pending_changes ?? {});
@@ -94,18 +144,38 @@ export class BotEngineService {
             await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_city', session!.pending_changes ?? {});
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskNewCity());
 
+        } else if (n === '3' || n.includes('provincia')) {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_province', session!.pending_changes ?? {});
+            await this.whatsApp.sendText(phone, `¿Cuál es la provincia correcta? 📍\n\n*0* → Volver al menú`);
+
+        } else if (n === '4' || n.includes('nombre')) {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_name', session!.pending_changes ?? {});
+            await this.whatsApp.sendText(phone, `¿Cuál es el nombre completo del destinatario? 👤\n\n*0* → Volver al menú`);
+
+        } else if (n === '5' || n.includes('telefono') || n.includes('celular') || n.includes('numero')) {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_phone', session!.pending_changes ?? {});
+            await this.whatsApp.sendText(phone, `¿Cuál es el número de contacto? 📱\n\n*0* → Volver al menú`);
+
+        } else if (n === '6' || n.includes('cantidad')) {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_quantity', session!.pending_changes ?? {});
+            await this.whatsApp.sendText(phone, `¿Cuántas unidades deseas? 📦\n\n*0* → Volver al menú`);
+
         } else {
-            await this.whatsApp.sendText(phone, `No entendí 😊. Responde:\n\n*1* → Cambiar dirección\n*2* → Cambiar ciudad`);
+            await this.whatsApp.sendText(
+                phone,
+                `No entendí 😊. Responde:\n\n*1* → Dirección\n*2* → Ciudad\n*3* → Provincia\n*4* → Nombre\n*5* → Teléfono\n*6* → Cantidad\n*0* → Volver al menú`,
+            );
         }
     }
 
-    private async handleNewAddress(
-        session: Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object,
-        input:   string,
-        phone:   string,
-    ): Promise<void> {
+    private async handleNewAddress(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
         if (input.trim().length < 5) {
-            await this.whatsApp.sendText(phone, `La dirección está incompleta 😊. Escríbeme la dirección completa.`);
+            await this.whatsApp.sendText(phone, `La dirección está incompleta 😊. Escríbeme la dirección completa.\n\n*0* → Volver al menú`);
             return;
         }
         const changes = { ...(session!.pending_changes ?? {}), address_1: input.trim() };
@@ -113,13 +183,14 @@ export class BotEngineService {
         await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
     }
 
-    private async handleNewCity(
-        session: Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object,
-        input:   string,
-        phone:   string,
-    ): Promise<void> {
+    private async handleNewCity(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
         if (input.trim().length < 3) {
-            await this.whatsApp.sendText(phone, `Escríbeme el nombre completo de la ciudad. 🏙️`);
+            await this.whatsApp.sendText(phone, `Escríbeme el nombre completo de la ciudad. 🏙️\n\n*0* → Volver al menú`);
             return;
         }
         const changes = { ...(session!.pending_changes ?? {}), city: input.trim() };
@@ -127,23 +198,109 @@ export class BotEngineService {
         await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
     }
 
-    private async handleConfirmChanges(
-        session: Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object,
-        input:   string,
-        phone:   string,
-    ): Promise<void> {
+    private async handleNewProvince(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
+        if (input.trim().length < 3) {
+            await this.whatsApp.sendText(phone, `Escríbeme el nombre completo de la provincia. 📍\n\n*0* → Volver al menú`);
+            return;
+        }
+        const changes = { ...(session!.pending_changes ?? {}), state: input.trim() };
+        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+    }
+
+    private async handleNewName(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
+        const trimmed = input.trim();
+        if (trimmed.length < 3 || !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(trimmed)) {
+            await this.whatsApp.sendText(phone, `Escríbeme el nombre completo solo con letras. 👤\n\n*0* → Volver al menú`);
+            return;
+        }
+        const changes = { ...(session!.pending_changes ?? {}), billing_first_name: trimmed };
+        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+    }
+
+    private async handleNewPhone(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
+        try {
+            const normalized = normalizePhone(input.trim());
+            const changes = { ...(session!.pending_changes ?? {}), billing_phone: normalized };
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
+            await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+        } catch {
+            await this.whatsApp.sendText(phone, `Ingresa un número válido de Ecuador. 📱\n\nEjemplo: 0991234567\n\n*0* → Volver al menú`);
+        }
+    }
+
+    private async handleNewQuantity(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
+        const qty = parseInt(input.trim(), 10);
+        if (isNaN(qty) || qty <= 0) {
+            await this.whatsApp.sendText(phone, `Ingresa un número válido mayor a 0. 📦\n\n*0* → Volver al menú`);
+            return;
+        }
+        const changes = { ...(session!.pending_changes ?? {}), quantity: qty };
+        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+    }
+
+    private async handleConfirmChanges(session: Session, input: string, phone: string): Promise<void> {
+        if (normalize(input) === '0') {
+            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+            return;
+        }
         if (matches(input, YES_KW)) {
             await this.orderRepo.updateStatus(session!.order_id, 'confirmed');
             await this.customerRepo.recordConfirmed(phone);
-            const city = session!.pending_changes?.['city'] ?? '';
-            await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', city));
+          await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', session!.order_id.toString()));
 
         } else if (matches(input, NO_KW)) {
             await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_modify_field', {});
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskWhatToModify(''));
 
         } else {
-            await this.whatsApp.sendText(phone, `Responde *SÍ* para confirmar los cambios o *NO* para corregirlos. 😊`);
+            await this.whatsApp.sendText(phone, `Responde *SÍ* para confirmar los cambios o *NO* para corregirlos. 😊\n\n*0* → Volver al menú`);
         }
+    }
+
+    private async handleReview(session: Session, input: string, phone: string): Promise<void> {
+        const rating = parseInt(input.trim(), 10);
+
+        if (!isNaN(rating) && rating >= 1 && rating <= 5) {
+            await this.orderRepo.saveRating(session!.order_id, rating);
+            await this.whatsApp.sendText(
+                phone,
+                `¡Gracias por tu calificación! ${'⭐'.repeat(rating)}\nTu opinión nos ayuda a mejorar 🌿`,
+            );
+            return;
+        }
+
+        const count = (session!.unrecognized_count ?? 0) + 1;
+        await this.orderRepo.incrementUnrecognized(session!.order_id);
+
+        if (count >= 3) {
+            await this.customerRepo.flagAgentReview(phone, 'No respondió review post-entrega');
+            return;
+        }
+
+        await this.whatsApp.sendText(phone, `Califica tu experiencia del *1* al *5* ⭐`);
     }
 }

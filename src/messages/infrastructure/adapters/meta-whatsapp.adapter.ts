@@ -76,9 +76,18 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         });
     }
 
-    buildAskWhatToModify(firstName: string): string {
-        return `Claro, ${firstName}. 😊 ¿Qué dato deseas modificar?\n\n*1* → Dirección de entrega\n*2* → Ciudad\n\nResponde con *1* o *2*.`;
-    }
+   buildAskWhatToModify(firstName: string): string {
+    return (
+        `${firstName ? `Claro ${firstName},` : 'Claro,'} 😊 ¿Qué dato deseas modificar?\n\n` +
+        `*1* → Dirección de entrega\n` +
+        `*2* → Ciudad\n` +
+        `*3* → Provincia\n` +
+        `*4* → Nombre del destinatario\n` +
+        `*5* → Número de contacto\n` +
+        `*6* → Cantidad\n` +
+        `*0* → Volver al menú principal`
+    );
+}
 
     buildAskNewAddress(): string {
         return `Por favor, escríbeme la nueva dirección completa de entrega. 📍`;
@@ -88,29 +97,29 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         return `Por favor, escríbeme la nueva ciudad de entrega. 🏙️`;
     }
 
-    buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, string>): string {
-        const addr  = changes['address_1'] ?? order.shipping?.address_1 ?? '';
-        const city  = changes['city']      ?? order.shipping?.city      ?? '';
-        const prods = order.line_items?.map((i) => `${i.quantity} x ${i.name}`).join(', ') ?? '';
+    buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
+    const addr  = String(changes['address_1'] ?? order.shipping?.address_1 ?? '');
+    const city  = String(changes['city']      ?? order.shipping?.city      ?? '');
+    const prods = order.line_items?.map((i) => `${i.quantity} x ${i.name}`).join(', ') ?? '';
 
-        return (
-            `Gracias, ${firstName}. Aquí está el resumen actualizado:\n\n` +
-            `📦 *Productos:* ${prods}\n` +
-            `🏙️ *Ciudad:* ${city}\n` +
-            `📍 *Dirección:* ${addr}\n\n` +
-            `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
-        );
-    }
+    return (
+        `Gracias${firstName ? ` ${firstName}` : ''}. Aquí está el resumen actualizado:\n\n` +
+        `📦 *Productos:* ${prods}\n` +
+        `🏙️ *Ciudad:* ${city}\n` +
+        `📍 *Dirección:* ${addr}\n\n` +
+        `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
+    );
+}
 
-    buildConfirmedMessage(firstName: string, city: string): string {
-        return (
-            `¡🎉 ${firstName}, gracias por confirmar tu pedido!\n\n` +
-            `La entrega para *${city}* toma entre 1 y 5 días hábiles. ` +
-            `Cuando se genere la guía 🚚 te la compartiremos 📦.\n\n` +
-            `Ten el pago listo para el mensajero. ` +
-            `Agradecemos tu confianza en *${this.store}* ${this.emoji}`
-        );
-    }
+    buildConfirmedMessage(firstName: string, orderId: string): string {
+    return (
+        `¡🎉 ${firstName ? firstName + ', ' : ''}gracias por confirmar tu pedido!\n\n` +
+        `Tu pedido *#${orderId}* ya está en proceso 📦.\n` +
+        `Cuando se genere la guía 🚚 te la compartiremos por aquí.\n\n` +
+        `Ten el pago listo cuando llegue el mensajero 💵\n` +
+        `Agradecemos tu confianza en *${this.store}* ${this.emoji}`
+    );
+}
 
     buildCancelledMessage(firstName: string): string {
         return (
@@ -130,7 +139,14 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
             `Responde *CONFIRMAR*, *MODIFICAR* o *CANCELAR*.`
         );
     }
-
+buildMainMenu(firstName: string): string {
+    return (
+        `${firstName ? `Hola ${firstName} 👋` : '👋'} ¿Qué deseas hacer con tu pedido?\n\n` +
+        `✅ *CONFIRMAR*\n` +
+        `✏️ *MODIFICAR*\n` +
+        `❌ *CANCELAR*`
+    );
+}
     buildUnrecognizedMessage(): string {
         return (
             `No entendí tu respuesta 😊. Por favor responde:\n\n` +

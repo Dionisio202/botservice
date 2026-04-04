@@ -7,6 +7,9 @@ import type { WooOrderDto } from '../dtos/order.dto';
 import { normalizePhone } from '../../infrastructure/utils/phone.utils';
 import { Prisma } from '@prisma/client';
 
+const TIER_MAX_PENDING = { new: 1, regular: 2, loyal: 3 } as const;
+type CustomerTier = keyof typeof TIER_MAX_PENDING;
+
 @Injectable()
 export class ProcessOrderUseCase {
     constructor(
@@ -27,12 +30,13 @@ export class ProcessOrderUseCase {
             customer = await this.customerRepo.create(phone, name);
         }
 
-        if (!customer.canOrder()) {
-            return { sessionId: -1 };
-        }
+        if (!customer.canOrder()) return { sessionId: -1 };
 
         const existing = await this.orderRepo.findByOrderId(wooOrder.id);
         if (existing) return { sessionId: existing.id };
+
+        const riskResult = await this.evaluateRisk(phone, customer);
+        if (riskResult.blocked) return { sessionId: -1 };
 
         const session = await this.orderRepo.create({
             order_id:     wooOrder.id,
@@ -42,11 +46,70 @@ export class ProcessOrderUseCase {
             max_attempts: maxAttempts,
         });
 
+        if (riskResult.needsReview) {
+            await this.customerRepo.flagAgentReview(phone, riskResult.reason ?? 'Score de riesgo elevado');
+        }
+
         this.eventEmitter.emit(
             'order.created',
             new OrderCreatedEvent(wooOrder.id, customer.id, session.id, wooOrder),
         );
 
         return { sessionId: session.id };
+    }
+
+    private async evaluateRisk(
+        phone: string,
+        customer: Awaited<ReturnType<ICustomerRepository['findByPhone']>> & object,
+    ): Promise<{ blocked: boolean; needsReview: boolean; reason?: string }> {
+        const riskConfig = {
+            blacklistThreshold: Number(process.env.BOT_RISK_BLACKLIST_THRESHOLD ?? 10),
+            blockThreshold:     Number(process.env.BOT_RISK_BLOCK_THRESHOLD     ?? 6),
+            reviewThreshold:    Number(process.env.BOT_RISK_REVIEW_THRESHOLD    ?? 3),
+        };
+
+        const tier       = (customer.customer_tier as CustomerTier) ?? 'new';
+        const maxPending = TIER_MAX_PENDING[tier] ?? 1;
+
+        const pendingCount = await this.orderRepo.countPendingByPhone(phone);
+        if (pendingCount >= maxPending) {
+            return { blocked: true, needsReview: false, reason: `Pending limit alcanzado (${pendingCount}/${maxPending})` };
+        }
+
+        const score = this.calculateScore(customer, pendingCount);
+
+        if (score >= riskConfig.blacklistThreshold) {
+            await this.customerRepo.blacklist(customer.id, `Blacklist automático — score ${score}`, 0);
+            return { blocked: true, needsReview: false };
+        }
+
+        if (score >= riskConfig.blockThreshold) {
+            await this.customerRepo.flagAgentReview(phone, `Score ${score} — bloqueo sin blacklist`);
+            return { blocked: true, needsReview: false };
+        }
+
+        if (score >= riskConfig.reviewThreshold) {
+            return { blocked: false, needsReview: true, reason: `Score ${score} — monitoreo activo` };
+        }
+
+        return { blocked: false, needsReview: false };
+    }
+
+    private calculateScore(
+        customer: Awaited<ReturnType<ICustomerRepository['findByPhone']>> & object,
+        pendingCount: number,
+    ): number {
+        let score = 0;
+
+        score += (customer.cancelled_orders ?? 0) * 2;
+        score += (customer.expired_sessions ?? 0) * 3;
+        score += (customer.lost_orders      ?? 0) * 4;
+
+        if (pendingCount > 1) score += (pendingCount - 1) * 3;
+        if ((customer.confirmed_orders ?? 0) === 0) score += 1;
+        if ((customer.confirmed_orders ?? 0) >= 1)  score -= 1;
+        if ((customer.confirmed_orders ?? 0) >= 3)  score -= 3;
+
+        return Math.max(0, score);
     }
 }

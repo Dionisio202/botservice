@@ -9,4 +9,5 @@ export interface ICustomerRepository {
     recordConfirmed(phone: string): Promise<void>;
     recordExpired(phone: string): Promise<void>;
     recordLost(phone: string, amount: number): Promise<void>;
+    flagAgentReview(phone: string, reason: string): Promise<void>;
 }

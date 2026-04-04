@@ -3,11 +3,15 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { ProcessOrderUseCase } from '../../application/usecases/process-order.usecase';
+import { ProcessOrderUpdateUseCase } from '../../application/usecases/process-order-update.usecase';
 import type { WooOrderDto } from '../../application/dtos/order.dto';
 
 @Controller('webhooks/woocommerce')
 export class WooController {
-    constructor(private readonly processOrderUseCase: ProcessOrderUseCase) {}
+    constructor(
+        private readonly processOrderUseCase:       ProcessOrderUseCase,
+        private readonly processOrderUpdateUseCase: ProcessOrderUpdateUseCase,
+    ) {}
 
     @Post()
     @HttpCode(200)
@@ -15,8 +19,15 @@ export class WooController {
         @Req() req: RawBodyRequest<Request>,
         @Body() body: WooOrderDto,
         @Headers('x-wc-webhook-signature') signature: string,
+        @Headers('x-wc-webhook-topic') topic: string,
     ): Promise<void> {
         this.verifySignature(req.rawBody!, signature);
+
+        if (topic === 'order.updated') {
+            await this.processOrderUpdateUseCase.execute(body);
+            return;
+        }
+
         await this.processOrderUseCase.execute(body);
     }
 

@@ -3,13 +3,19 @@ import { Prisma } from '@prisma/client';
 
 export interface IOrderRepository {
     findByOrderId(orderId: number): Promise<Order | null>;
-    findActivePendingByPhone(phone: string): Promise<(Order & { phone: string; pending_changes: Record<string, string> }) | null>;
+    findActivePendingByPhone(phone: string): Promise<(Order & { phone: string; pending_changes: Record<string, unknown>; unrecognized_count: number }) | null>;
     findPendingRetries(): Promise<Array<Order & { phone: string }>>;
     findExpiredSessions(): Promise<Array<Order & { phone: string }>>;
     create(data: CreateOrderData): Promise<Order>;
     updateStatus(orderId: number, status: OrderStatus): Promise<void>;
-    updateConvStep(orderId: number, step: ConvStep, pendingChanges: Record<string, string>): Promise<void>;
+    updateConvStep(orderId: number, step: ConvStep, pendingChanges: Record<string, unknown>): Promise<void>;
     markAttemptSent(orderId: number, messageId: string): Promise<void>;
+    saveRating(orderId: number, rating: number): Promise<void>;
+    incrementUnrecognized(orderId: number): Promise<void>;
+    countPendingByPhone(phone: string): Promise<number>;
+findLastSessionByPhone(phone: string): Promise<(Order & { phone: string }) | null>;
+setReviewRequestedAt(orderId: number): Promise<void>;
+
 }
 
 export interface CreateOrderData {
