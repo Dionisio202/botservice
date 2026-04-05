@@ -19,6 +19,7 @@ const MODIFY_KW  = ['modificar', 'modifico', 'cambiar', 'cambio', 'editar', 'act
 const CANCEL_KW  = ['cancelar', 'cancelo', 'cancel', 'no quiero', 'anular']                            as const;
 const YES_KW     = ['si', 'ok', 'dale', 'listo', 'correcto', 'yes', 'confirmo', 'confirmar']           as const;
 const NO_KW      = ['no', 'nope', 'negativo']                                                           as const;
+const ASESOR_MSG = `Un asesor revisará tu caso y se contactará contigo pronto 🌿`;
 
 type Session = Awaited<ReturnType<IOrderRepository['findActivePendingByPhone']>> & object;
 
@@ -81,6 +82,21 @@ export class BotEngineService {
         }
     }
 
+    private async flagAndNotify(phone: string, orderId: number, reason: string): Promise<void> {
+        await this.customerRepo.flagAgentReview(phone, reason);
+        await this.whatsApp.sendText(phone, ASESOR_MSG);
+    }
+
+    private async incrementAndCheck(session: Session, phone: string, reason: string): Promise<boolean> {
+        const count = (session!.unrecognized_count ?? 0) + 1;
+        await this.orderRepo.incrementUnrecognized(session!.order_id);
+        if (count >= 3) {
+            await this.flagAndNotify(phone, session!.order_id, reason);
+            return true;
+        }
+        return false;
+    }
+
     private buildOrderFromSession(session: Session): WooOrderDto {
         const items = Array.isArray(session!.order_items)
             ? (session!.order_items as Array<{ name: string; quantity: number; price: string }>)
@@ -138,15 +154,8 @@ export class BotEngineService {
             await this.whatsApp.sendText(phone, this.whatsApp.buildCancelledMessage(''));
 
         } else {
-            const count = (session!.unrecognized_count ?? 0) + 1;
-            await this.orderRepo.incrementUnrecognized(session!.order_id);
-
-           if (count >= 3) {
-    await this.customerRepo.flagAgentReview(phone, 'Mensajes no reconocidos repetidos en menú principal');
-    await this.whatsApp.sendText(phone, `Un asesor revisará tu caso y se contactará contigo pronto 🌿`);
-    return;
-}
-
+            const silenced = await this.incrementAndCheck(session, phone, 'Mensajes no reconocidos en menú principal');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, this.whatsApp.buildUnrecognizedMessage());
         }
     }
@@ -185,6 +194,8 @@ export class BotEngineService {
             await this.whatsApp.sendText(phone, `¿Cuántas unidades deseas? 📦\n\n*0* → Volver al menú`);
 
         } else {
+            const silenced = await this.incrementAndCheck(session, phone, 'Mensajes no reconocidos en menú de modificación');
+            if (silenced) return;
             await this.whatsApp.sendText(
                 phone,
                 `No entendí 😊. Responde:\n\n*1* → Dirección\n*2* → Ciudad\n*3* → Provincia\n*4* → Nombre\n*5* → Teléfono\n*6* → Cantidad\n*0* → Volver al menú`,
@@ -199,6 +210,8 @@ export class BotEngineService {
             return;
         }
         if (input.trim().length < 5) {
+            const silenced = await this.incrementAndCheck(session, phone, 'Dirección inválida repetida');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `La dirección está incompleta 😊. Escríbeme la dirección completa.\n\n*0* → Volver al menú`);
             return;
         }
@@ -214,6 +227,8 @@ export class BotEngineService {
             return;
         }
         if (input.trim().length < 3) {
+            const silenced = await this.incrementAndCheck(session, phone, 'Ciudad inválida repetida');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `Escríbeme el nombre completo de la ciudad. 🏙️\n\n*0* → Volver al menú`);
             return;
         }
@@ -230,6 +245,8 @@ export class BotEngineService {
         }
         const trimmed = input.trim();
         if (trimmed.length < 3 || /^\d+$/.test(trimmed)) {
+            const silenced = await this.incrementAndCheck(session, phone, 'Provincia inválida repetida');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `Escríbeme el nombre completo de la provincia. 📍\n\n*0* → Volver al menú`);
             return;
         }
@@ -246,6 +263,8 @@ export class BotEngineService {
         }
         const trimmed = input.trim();
         if (trimmed.length < 3 || !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(trimmed)) {
+            const silenced = await this.incrementAndCheck(session, phone, 'Nombre inválido repetido');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `Escríbeme el nombre completo solo con letras. 👤\n\n*0* → Volver al menú`);
             return;
         }
@@ -266,6 +285,8 @@ export class BotEngineService {
             await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
             await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
         } catch {
+            const silenced = await this.incrementAndCheck(session, phone, 'Teléfono inválido repetido');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `Ingresa un número válido de Ecuador. 📱\n\nEjemplo: 0991234567\n\n*0* → Volver al menú`);
         }
     }
@@ -278,6 +299,8 @@ export class BotEngineService {
         }
         const qty = parseInt(input.trim(), 10);
         if (isNaN(qty) || qty <= 0) {
+            const silenced = await this.incrementAndCheck(session, phone, 'Cantidad inválida repetida');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `Ingresa un número válido mayor a 0. 📦\n\n*0* → Volver al menú`);
             return;
         }
@@ -302,6 +325,8 @@ export class BotEngineService {
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskWhatToModify(''));
 
         } else {
+            const silenced = await this.incrementAndCheck(session, phone, 'Mensajes no reconocidos en confirmación de cambios');
+            if (silenced) return;
             await this.whatsApp.sendText(phone, `Responde *SÍ* para confirmar los cambios o *NO* para corregirlos. 😊\n\n*0* → Volver al menú`);
         }
     }
@@ -318,15 +343,8 @@ export class BotEngineService {
             return;
         }
 
-        const count = (session!.unrecognized_count ?? 0) + 1;
-        await this.orderRepo.incrementUnrecognized(session!.order_id);
-
-       if (count >= 3) {
-    await this.customerRepo.flagAgentReview(phone, 'No respondió review post-entrega');
-    await this.whatsApp.sendText(phone, `Un asesor revisará tu caso y se contactará contigo pronto 🌿`);
-    return;
-}
-
+        const silenced = await this.incrementAndCheck(session, phone, 'No respondió review post-entrega');
+        if (silenced) return;
         await this.whatsApp.sendText(phone, `Califica tu experiencia del *1* al *5* ⭐`);
     }
 }
