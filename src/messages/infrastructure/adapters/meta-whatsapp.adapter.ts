@@ -44,6 +44,13 @@ async sendMedia(phone: string, mediaUrl: string, type: 'image' | 'document', cap
         },
     });
 }
+async downloadMedia(mediaId: string): Promise<string> {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+        headers: { 'Authorization': `Bearer ${this.token}` },
+    });
+    const data = await res.json() as { url: string };
+    return data.url;
+}
     async sendConfirmationTemplate(order: WooOrderDto, phone: string): Promise<string> {
         const productList = order.line_items.map((i) => `• ${i.name} x${i.quantity}`).join('\n');
 

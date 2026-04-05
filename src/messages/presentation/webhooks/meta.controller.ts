@@ -14,6 +14,9 @@ interface MetaWebhookBody {
                     text?:     { body: string };
                     button?:   { payload: string };
                     interactive?: { button_reply?: { id: string } };
+                    image?:    { id: string; caption?: string };
+                    document?: { id: string; caption?: string };
+                    video?:    { id: string; caption?: string };
                 }>;
             };
         }>;
@@ -48,11 +51,23 @@ export class MetaController {
                 if (!messages) continue;
 
                 for (const msg of messages) {
+                    const mediaType = msg.type === 'image'    ? 'image'
+                                    : msg.type === 'document' ? 'document'
+                                    : msg.type === 'video'    ? 'video'
+                                    : null;
+
+                    const mediaSource = msg.image ?? msg.document ?? msg.video;
+
                     await this.receiveMessageUseCase.execute(
                         msg.from,
                         msg.text?.body ?? msg.button?.payload ?? '',
                         msg.id,
                         msg.button?.payload ?? msg.interactive?.button_reply?.id,
+                        mediaType && mediaSource ? {
+                            mediaId:   mediaSource.id,
+                            mediaType: mediaType as 'image' | 'document' | 'video',
+                            caption:   mediaSource.caption,
+                        } : undefined,
                     );
                 }
             }

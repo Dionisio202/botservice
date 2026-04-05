@@ -14,4 +14,5 @@ buildConfirmedMessage(firstName: string, orderId: string): string;
     buildBlockedMessage(): string;
     buildMainMenu(firstName: string): string;
     sendMedia(phone: string, mediaUrl: string, type: 'image' | 'document', caption?: string): Promise<void>;
+downloadMedia(mediaId: string): Promise<string>;
 }

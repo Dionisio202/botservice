@@ -5,6 +5,12 @@ import type { IWhatsAppAdapter } from '../../domain/interfaces/whatsapp-adapter.
 import type { ICustomerRepository } from '../../../customers/domain/interfaces/customer-repository.interface';
 import { BotEngineService } from '../../infrastructure/adapters/bot-engine.service';
 
+interface IncomingMedia {
+    mediaId:   string;
+    mediaType: 'image' | 'document' | 'video';
+    caption?:  string;
+}
+
 @Injectable()
 export class ReceiveMessageUseCase {
     constructor(
@@ -19,18 +25,45 @@ export class ReceiveMessageUseCase {
         private readonly botEngine: BotEngineService,
     ) {}
 
-    async execute(phone: string, text: string, waMessageId?: string, buttonPayload?: string): Promise<void> {
+    async execute(
+        phone:         string,
+        text:          string,
+        waMessageId?:  string,
+        buttonPayload?: string,
+        media?:        IncomingMedia,
+    ): Promise<void> {
         const customer = await this.customerRepo.findByPhone(phone);
         if (!customer) return;
 
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        const session = await this.orderRepo.findActivePendingByPhone(phone);
+
+        if (media) {
+            const mediaUrl = await this.whatsApp.downloadMedia(media.mediaId);
+
+            await this.messageRepo.create({
+                customer_id:      customer.id,
+                order_session_id: session?.id,
+                wa_message_id:    waMessageId,
+                direction:        'inbound',
+                msg_type:         'media',
+                content:          media.caption ?? `[${media.mediaType}]`,
+                media_url:        mediaUrl,
+                media_type:       media.mediaType,
+            });
+
+            if (session?.conv_step === 'awaiting_review') {
+                await this.botEngine.processIncomingMessage(phone, '5', buttonPayload);
+            }
+            return;
+        }
 
         await this.messageRepo.create({
-            customer_id:   customer.id,
-            wa_message_id: waMessageId,
-            direction:     'inbound',
-            msg_type:      'text',
-            content:       text,
+            customer_id:      customer.id,
+            order_session_id: session?.id,
+            wa_message_id:    waMessageId,
+            direction:        'inbound',
+            msg_type:         'text',
+            content:          text,
         });
 
         await this.botEngine.processIncomingMessage(phone, text, buttonPayload);
