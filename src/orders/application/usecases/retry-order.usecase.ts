@@ -41,14 +41,14 @@ export class RetryOrderUseCase {
 
                 if (session.attempts >= maxAttempts) return;
 
-                const fakeOrder: WooOrderDto = {
-                    id:         session.order_id,
-                    total:      String(session.order_total),
-                    status:     'pending',
-                    billing:    { first_name: '', last_name: '', phone: session.phone },
-                    shipping:   { address_1: '', city: '' },
-                    line_items: [],
-                };
+              const fakeOrder: WooOrderDto = {
+    id:         session.order_id,
+    total:      String(session.order_total),
+    status:     'pending',
+    billing:    { first_name: '', last_name: '', phone: session.phone, city: '', state: '', address_1: '' },
+    shipping:   { address_1: '', city: '', state: '' },
+    line_items: [],
+};
 
                 const text = this.whatsApp.buildRetryMessage('', fakeOrder);
                 await this.whatsApp.sendText(session.phone, text);
