@@ -71,7 +71,7 @@ async downloadMedia(mediaId: string): Promise<string> {
                             { type: 'text', text: String(order.id) },
                             { type: 'text', text: productList },
                             { type: 'text', text: `$${order.total}` },
-                            { type: 'text', text: `${order.shipping.city} - ${order.shipping.address_1}` },
+                           { type: 'text', text: `${order.billing.city || order.shipping.city} - ${order.billing.address_1 || order.shipping.address_1}` },
                         ],
                     },
                     { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'CONFIRM' }] },
@@ -114,10 +114,12 @@ async downloadMedia(mediaId: string): Promise<string> {
         return `Por favor, escríbeme la nueva ciudad de entrega. 🏙️`;
     }
 
-    buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
-    const addr  = String(changes['address_1'] ?? order.shipping?.address_1 ?? '');
-    const city  = String(changes['city']      ?? order.shipping?.city      ?? '');
-    const prods = order.line_items?.map((i) => `${i.quantity} x ${i.name}`).join(', ') ?? '';
+   buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
+    const addr  = String(changes['address_1'] ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
+    const city  = String(changes['city']      ?? order.shipping?.city      ?? order.billing?.city      ?? '');
+    const prods = order.line_items?.length
+        ? order.line_items.map((i) => `${i.quantity} x ${i.name}`).join(', ')
+        : String(changes['products'] ?? '');
 
     return (
         `Gracias${firstName ? ` ${firstName}` : ''}. Aquí está el resumen actualizado:\n\n` +
@@ -127,7 +129,6 @@ async downloadMedia(mediaId: string): Promise<string> {
         `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
     );
 }
-
     buildConfirmedMessage(firstName: string, orderId: string): string {
     return (
         `¡🎉 ${firstName ? firstName + ', ' : ''}gracias por confirmar tu pedido!\n\n` +

@@ -12,10 +12,14 @@ export interface WooOrderDto {
         first_name: string;
         last_name:  string;
         phone:      string;
+        city:       string;
+        state:      string;
+        address_1:  string;
     };
     shipping: {
         address_1: string;
         city:      string;
+        state:     string;
     };
     line_items: WooLineItem[];
 }

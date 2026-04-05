@@ -34,78 +34,93 @@ export class BotEngineService {
     ) {}
 
     async processIncomingMessage(phone: string, text: string, buttonPayload?: string): Promise<void> {
-    const customer = await this.customerRepo.findByPhone(phone);
+        const customer = await this.customerRepo.findByPhone(phone);
 
-    if (customer?.is_blacklisted) return;
+        if (customer?.is_blacklisted) return;
 
-    const session = await this.orderRepo.findActivePendingByPhone(phone);
+        const session = await this.orderRepo.findActivePendingByPhone(phone);
 
-    if (!session) {
-        await this.handleNoSession(phone, customer);
-        return;
+        if (!session) {
+            await this.handleNoSession(phone, customer);
+            return;
+        }
+
+        const input = buttonPayload ?? text;
+
+        switch (session.conv_step) {
+            case 'awaiting_action':
+                await this.handleMainAction(session, input, phone);
+                break;
+            case 'awaiting_modify_field':
+                await this.handleModifyField(session, input, phone);
+                break;
+            case 'awaiting_new_address':
+                await this.handleNewAddress(session, input, phone);
+                break;
+            case 'awaiting_new_city':
+                await this.handleNewCity(session, input, phone);
+                break;
+            case 'awaiting_new_province':
+                await this.handleNewProvince(session, input, phone);
+                break;
+            case 'awaiting_new_name':
+                await this.handleNewName(session, input, phone);
+                break;
+            case 'awaiting_new_phone':
+                await this.handleNewPhone(session, input, phone);
+                break;
+            case 'awaiting_new_quantity':
+                await this.handleNewQuantity(session, input, phone);
+                break;
+            case 'awaiting_confirm_changes':
+                await this.handleConfirmChanges(session, input, phone);
+                break;
+            case 'awaiting_review':
+                await this.handleReview(session, input, phone);
+                break;
+        }
     }
 
-    const input = buttonPayload ?? text;
+    private buildOrderFromSession(session: Session): WooOrderDto {
+        const items = Array.isArray(session!.order_items)
+            ? (session!.order_items as Array<{ name: string; quantity: number; price: string }>)
+            : [];
 
-    switch (session.conv_step) {
-        case 'awaiting_action':
-            await this.handleMainAction(session, input, phone);
-            break;
-        case 'awaiting_modify_field':
-            await this.handleModifyField(session, input, phone);
-            break;
-        case 'awaiting_new_address':
-            await this.handleNewAddress(session, input, phone);
-            break;
-        case 'awaiting_new_city':
-            await this.handleNewCity(session, input, phone);
-            break;
-        case 'awaiting_new_province':
-            await this.handleNewProvince(session, input, phone);
-            break;
-        case 'awaiting_new_name':
-            await this.handleNewName(session, input, phone);
-            break;
-        case 'awaiting_new_phone':
-            await this.handleNewPhone(session, input, phone);
-            break;
-        case 'awaiting_new_quantity':
-            await this.handleNewQuantity(session, input, phone);
-            break;
-        case 'awaiting_confirm_changes':
-            await this.handleConfirmChanges(session, input, phone);
-            break;
-        case 'awaiting_review':
-            await this.handleReview(session, input, phone);
-            break;
-    }
-}
-
-private async handleNoSession(
-    phone: string,
-    customer: Awaited<ReturnType<ICustomerRepository['findByPhone']>> | null,
-): Promise<void> {
-    if (!customer) return;
-
-    const lastSession = await this.orderRepo.findLastSessionByPhone(phone);
-    if (!lastSession) return;
-
-    if (lastSession.status === 'expired') {
-        await this.whatsApp.sendText(
-            phone,
-            `Tu pedido #${lastSession.order_id} ya expiró ⏰.\nSi deseas realizar uno nuevo, visita nuestra tienda.`,
-        );
-        return;
+        return {
+            id:         session!.order_id,
+            total:      String(session!.order_total ?? ''),
+            status:     'pending',
+            billing:    { first_name: '', last_name: '', phone: session!.phone, city: '', state: '', address_1: '' },
+            shipping:   { address_1: '', city: '', state: '' },
+            line_items: items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        };
     }
 
-    if (lastSession.status === 'cancelled') {
-        await this.whatsApp.sendText(
-            phone,
-            `Tu pedido #${lastSession.order_id} fue cancelado ❌.\nPuedes realizar un nuevo pedido cuando gustes 🌿`,
-        );
-        return;
+    private async handleNoSession(
+        phone: string,
+        customer: Awaited<ReturnType<ICustomerRepository['findByPhone']>> | null,
+    ): Promise<void> {
+        if (!customer) return;
+
+        const lastSession = await this.orderRepo.findLastSessionByPhone(phone);
+        if (!lastSession) return;
+
+        if (lastSession.status === 'expired') {
+            await this.whatsApp.sendText(
+                phone,
+                `Tu pedido #${lastSession.order_id} ya expiró ⏰.\nSi deseas realizar uno nuevo, visita nuestra tienda.`,
+            );
+            return;
+        }
+
+        if (lastSession.status === 'cancelled') {
+            await this.whatsApp.sendText(
+                phone,
+                `Tu pedido #${lastSession.order_id} fue cancelado ❌.\nPuedes realizar un nuevo pedido cuando gustes 🌿`,
+            );
+            return;
+        }
     }
-}
 
     private async handleMainAction(session: Session, input: string, phone: string): Promise<void> {
         if (input === 'CONFIRM' || matches(input, CONFIRM_KW)) {
@@ -123,6 +138,14 @@ private async handleNoSession(
             await this.whatsApp.sendText(phone, this.whatsApp.buildCancelledMessage(''));
 
         } else {
+            const count = (session!.unrecognized_count ?? 0) + 1;
+            await this.orderRepo.incrementUnrecognized(session!.order_id);
+
+            if (count >= 3) {
+                await this.customerRepo.flagAgentReview(phone, 'Mensajes no reconocidos repetidos en menú principal');
+                return;
+            }
+
             await this.whatsApp.sendText(phone, this.whatsApp.buildUnrecognizedMessage());
         }
     }
@@ -180,7 +203,7 @@ private async handleNoSession(
         }
         const changes = { ...(session!.pending_changes ?? {}), address_1: input.trim() };
         await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
     }
 
     private async handleNewCity(session: Session, input: string, phone: string): Promise<void> {
@@ -195,7 +218,7 @@ private async handleNoSession(
         }
         const changes = { ...(session!.pending_changes ?? {}), city: input.trim() };
         await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
     }
 
     private async handleNewProvince(session: Session, input: string, phone: string): Promise<void> {
@@ -204,13 +227,14 @@ private async handleNoSession(
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
-        if (input.trim().length < 3) {
+        const trimmed = input.trim();
+        if (trimmed.length < 3 || /^\d+$/.test(trimmed)) {
             await this.whatsApp.sendText(phone, `Escríbeme el nombre completo de la provincia. 📍\n\n*0* → Volver al menú`);
             return;
         }
-        const changes = { ...(session!.pending_changes ?? {}), state: input.trim() };
+        const changes = { ...(session!.pending_changes ?? {}), state: trimmed };
         await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
     }
 
     private async handleNewName(session: Session, input: string, phone: string): Promise<void> {
@@ -226,7 +250,7 @@ private async handleNoSession(
         }
         const changes = { ...(session!.pending_changes ?? {}), billing_first_name: trimmed };
         await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
     }
 
     private async handleNewPhone(session: Session, input: string, phone: string): Promise<void> {
@@ -239,7 +263,7 @@ private async handleNoSession(
             const normalized = normalizePhone(input.trim());
             const changes = { ...(session!.pending_changes ?? {}), billing_phone: normalized };
             await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-            await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+            await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
         } catch {
             await this.whatsApp.sendText(phone, `Ingresa un número válido de Ecuador. 📱\n\nEjemplo: 0991234567\n\n*0* → Volver al menú`);
         }
@@ -258,7 +282,7 @@ private async handleNoSession(
         }
         const changes = { ...(session!.pending_changes ?? {}), quantity: qty };
         await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', {} as WooOrderDto, changes));
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
     }
 
     private async handleConfirmChanges(session: Session, input: string, phone: string): Promise<void> {
@@ -270,7 +294,7 @@ private async handleNoSession(
         if (matches(input, YES_KW)) {
             await this.orderRepo.updateStatus(session!.order_id, 'confirmed');
             await this.customerRepo.recordConfirmed(phone);
-          await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', session!.order_id.toString()));
+            await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', session!.order_id.toString()));
 
         } else if (matches(input, NO_KW)) {
             await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_modify_field', {});

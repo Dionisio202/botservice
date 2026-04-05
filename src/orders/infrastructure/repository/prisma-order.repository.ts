@@ -15,7 +15,13 @@ export class PrismaOrderRepository implements IOrderRepository {
         return this.toEntity(row);
     }
 
-    async findActivePendingByPhone(phone: string): Promise<(Order & { phone: string; pending_changes: Record<string, unknown>; unrecognized_count: number }) | null> {
+ async findActivePendingByPhone(phone: string): Promise<(Order & { 
+    phone: string; 
+    pending_changes: Record<string, unknown>; 
+    unrecognized_count: number;
+    order_items: unknown;
+    order_total: number;
+}) | null> {
     const row = await this.prisma.botOrderSession.findFirst({
         where:   { status: 'pending', customer: { phone } },
         include: { customer: true },
@@ -26,6 +32,8 @@ export class PrismaOrderRepository implements IOrderRepository {
         phone:              row.customer.phone,
         pending_changes:    (row.pending_changes as Record<string, unknown>) ?? {},
         unrecognized_count: row.unrecognized_count ?? 0,
+        order_items:        row.order_items,
+        order_total:        Number(row.order_total),
     });
 }
 async saveRating(orderId: number, rating: number): Promise<void> {
