@@ -141,10 +141,11 @@ export class BotEngineService {
             const count = (session!.unrecognized_count ?? 0) + 1;
             await this.orderRepo.incrementUnrecognized(session!.order_id);
 
-            if (count >= 3) {
-                await this.customerRepo.flagAgentReview(phone, 'Mensajes no reconocidos repetidos en menú principal');
-                return;
-            }
+           if (count >= 3) {
+    await this.customerRepo.flagAgentReview(phone, 'Mensajes no reconocidos repetidos en menú principal');
+    await this.whatsApp.sendText(phone, `Un asesor revisará tu caso y se contactará contigo pronto 🌿`);
+    return;
+}
 
             await this.whatsApp.sendText(phone, this.whatsApp.buildUnrecognizedMessage());
         }
@@ -320,10 +321,11 @@ export class BotEngineService {
         const count = (session!.unrecognized_count ?? 0) + 1;
         await this.orderRepo.incrementUnrecognized(session!.order_id);
 
-        if (count >= 3) {
-            await this.customerRepo.flagAgentReview(phone, 'No respondió review post-entrega');
-            return;
-        }
+       if (count >= 3) {
+    await this.customerRepo.flagAgentReview(phone, 'No respondió review post-entrega');
+    await this.whatsApp.sendText(phone, `Un asesor revisará tu caso y se contactará contigo pronto 🌿`);
+    return;
+}
 
         await this.whatsApp.sendText(phone, `Califica tu experiencia del *1* al *5* ⭐`);
     }
