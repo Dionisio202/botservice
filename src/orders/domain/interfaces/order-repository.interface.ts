@@ -21,6 +21,7 @@ export interface IOrderRepository {
     countPendingByPhone(phone: string): Promise<number>;
 findLastSessionByPhone(phone: string): Promise<(Order & { phone: string }) | null>;
 setReviewRequestedAt(orderId: number): Promise<void>;
+updateConvStepOnly(orderId: number, step: ConvStep): Promise<void>;
 
 }
 

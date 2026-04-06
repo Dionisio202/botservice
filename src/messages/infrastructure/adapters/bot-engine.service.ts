@@ -90,7 +90,8 @@ export class BotEngineService {
     private async incrementAndCheck(session: Session, phone: string, reason: string): Promise<boolean> {
         const count = (session!.unrecognized_count ?? 0) + 1;
         await this.orderRepo.incrementUnrecognized(session!.order_id);
-        if (count >= 3) {
+        const limit = Number(process.env.BOT_UNRECOGNIZED_LIMIT ?? 3);
+if (count >= limit) {
             await this.flagAndNotify(phone, session!.order_id, reason);
             return true;
         }
@@ -145,7 +146,7 @@ export class BotEngineService {
             await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', session!.order_id.toString()));
 
         } else if (input === 'MODIFY' || matches(input, MODIFY_KW)) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_modify_field', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_modify_field');
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskWhatToModify(''));
 
         } else if (input === 'CANCEL' || matches(input, CANCEL_KW)) {
@@ -164,33 +165,33 @@ export class BotEngineService {
         const n = normalize(input);
 
         if (n === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
 
         if (n === '1' || n.includes('direcc') || n.includes('calle')) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_address', session!.pending_changes ?? {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_new_address');
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskNewAddress());
 
         } else if (n === '2' || n.includes('ciudad') || n.includes('city')) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_city', session!.pending_changes ?? {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_new_city');
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskNewCity());
 
         } else if (n === '3' || n.includes('provincia')) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_province', session!.pending_changes ?? {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_new_province');
             await this.whatsApp.sendText(phone, `¿Cuál es la provincia correcta? 📍\n\n*0* → Volver al menú`);
 
         } else if (n === '4' || n.includes('nombre')) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_name', session!.pending_changes ?? {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_new_name');
             await this.whatsApp.sendText(phone, `¿Cuál es el nombre completo del destinatario? 👤\n\n*0* → Volver al menú`);
 
         } else if (n === '5' || n.includes('telefono') || n.includes('celular') || n.includes('numero')) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_phone', session!.pending_changes ?? {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_new_phone');
             await this.whatsApp.sendText(phone, `¿Cuál es el número de contacto? 📱\n\n*0* → Volver al menú`);
 
         } else if (n === '6' || n.includes('cantidad')) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_new_quantity', session!.pending_changes ?? {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_new_quantity');
             await this.whatsApp.sendText(phone, `¿Cuántas unidades deseas? 📦\n\n*0* → Volver al menú`);
 
         } else {
@@ -205,7 +206,7 @@ export class BotEngineService {
 
     private async handleNewAddress(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -222,7 +223,7 @@ export class BotEngineService {
 
     private async handleNewCity(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -239,7 +240,7 @@ export class BotEngineService {
 
     private async handleNewProvince(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -257,7 +258,7 @@ export class BotEngineService {
 
     private async handleNewName(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -275,7 +276,7 @@ export class BotEngineService {
 
     private async handleNewPhone(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -293,7 +294,7 @@ export class BotEngineService {
 
     private async handleNewQuantity(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -311,7 +312,7 @@ export class BotEngineService {
 
     private async handleConfirmChanges(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_action', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
@@ -321,7 +322,7 @@ export class BotEngineService {
             await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', session!.order_id.toString()));
 
         } else if (matches(input, NO_KW)) {
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_modify_field', {});
+            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_modify_field');
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskWhatToModify(''));
 
         } else {

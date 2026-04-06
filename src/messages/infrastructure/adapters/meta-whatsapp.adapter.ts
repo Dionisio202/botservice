@@ -18,6 +18,21 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
     private get store(): string { return process.env.STORE_NAME     ?? 'Nuestra tienda'; }
     private get emoji(): string { return process.env.STORE_EMOJI    ?? '🌿'; }
 
+    private readonly EC_PROVINCES: Record<string, string> = {
+        'EC-A': 'Azuay',       'EC-B': 'Bolívar',          'EC-F': 'Cañar',
+        'EC-C': 'Carchi',      'EC-H': 'Chimborazo',       'EC-X': 'Cotopaxi',
+        'EC-O': 'El Oro',      'EC-E': 'Esmeraldas',       'EC-W': 'Galápagos',
+        'EC-G': 'Guayas',      'EC-I': 'Imbabura',         'EC-L': 'Loja',
+        'EC-R': 'Los Ríos',    'EC-M': 'Manabí',           'EC-S': 'Morona Santiago',
+        'EC-N': 'Napo',        'EC-D': 'Orellana',         'EC-P': 'Pastaza',
+        'EC-Y': 'Pichincha',   'EC-SE': 'Santa Elena',     'EC-SD': 'Santo Domingo',
+        'EC-U': 'Sucumbíos',   'EC-T': 'Tungurahua',       'EC-Z': 'Zamora Chinchipe',
+    };
+
+    private resolveProvince(code: string): string {
+        return this.EC_PROVINCES[code] ?? code;
+    }
+
     private async post<T>(payload: unknown): Promise<T> {
         const res = await fetch(this.url, {
             method:  'POST',
@@ -33,26 +48,30 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         }
         return res.json() as Promise<T>;
     }
-async sendMedia(phone: string, mediaUrl: string, type: 'image' | 'document', caption?: string): Promise<void> {
-    await this.post({
-        messaging_product: 'whatsapp',
-        to:   normalizePhone(phone),
-        type,
-        [type]: {
-            link:    mediaUrl,
-            caption: caption ?? '',
-        },
-    });
-}
-async downloadMedia(mediaId: string): Promise<string> {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
-        headers: { 'Authorization': `Bearer ${this.token}` },
-    });
-    const data = await res.json() as { url: string };
-    return data.url;
-}
+
+    async sendMedia(phone: string, mediaUrl: string, type: 'image' | 'document', caption?: string): Promise<void> {
+        await this.post({
+            messaging_product: 'whatsapp',
+            to:   normalizePhone(phone),
+            type,
+            [type]: { link: mediaUrl, caption: caption ?? '' },
+        });
+    }
+
+    async downloadMedia(mediaId: string): Promise<string> {
+        const res = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+            headers: { 'Authorization': `Bearer ${this.token}` },
+        });
+        const data = await res.json() as { url: string };
+        return data.url;
+    }
+
     async sendConfirmationTemplate(order: WooOrderDto, phone: string): Promise<string> {
         const productList = order.line_items.map((i) => `• ${i.name} x${i.quantity}`).join('\n');
+        const city        = order.billing.city     || order.shipping.city     || '';
+        const province    = this.resolveProvince(order.billing.state || order.shipping.state || '');
+        const address     = order.billing.address_1 || order.shipping.address_1 || '';
+        const location    = [city, province, address].filter(Boolean).join(' - ');
 
         const data = await this.post<MetaApiResponse>({
             messaging_product: 'whatsapp',
@@ -71,7 +90,7 @@ async downloadMedia(mediaId: string): Promise<string> {
                             { type: 'text', text: String(order.id) },
                             { type: 'text', text: productList },
                             { type: 'text', text: `$${order.total}` },
-                           { type: 'text', text: `${order.billing.city || order.shipping.city} - ${order.billing.address_1 || order.shipping.address_1}` },
+                            { type: 'text', text: location },
                         ],
                     },
                     { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'CONFIRM' }] },
@@ -93,18 +112,18 @@ async downloadMedia(mediaId: string): Promise<string> {
         });
     }
 
-   buildAskWhatToModify(firstName: string): string {
-    return (
-        `${firstName ? `Claro ${firstName},` : 'Claro,'} 😊 ¿Qué dato deseas modificar?\n\n` +
-        `*1* → Dirección de entrega\n` +
-        `*2* → Ciudad\n` +
-        `*3* → Provincia\n` +
-        `*4* → Nombre del destinatario\n` +
-        `*5* → Número de contacto\n` +
-        `*6* → Cantidad\n` +
-        `*0* → Volver al menú principal`
-    );
-}
+    buildAskWhatToModify(firstName: string): string {
+        return (
+            `${firstName ? `Claro ${firstName},` : 'Claro,'} 😊 ¿Qué dato deseas modificar?\n\n` +
+            `*1* → Dirección de entrega\n` +
+            `*2* → Ciudad\n` +
+            `*3* → Provincia\n` +
+            `*4* → Nombre del destinatario\n` +
+            `*5* → Número de contacto\n` +
+            `*6* → Cantidad\n` +
+            `*0* → Volver al menú principal`
+        );
+    }
 
     buildAskNewAddress(): string {
         return `Por favor, escríbeme la nueva dirección completa de entrega. 📍`;
@@ -114,30 +133,34 @@ async downloadMedia(mediaId: string): Promise<string> {
         return `Por favor, escríbeme la nueva ciudad de entrega. 🏙️`;
     }
 
-   buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
-    const addr  = String(changes['address_1'] ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
-    const city  = String(changes['city']      ?? order.shipping?.city      ?? order.billing?.city      ?? '');
-    const prods = order.line_items?.length
-        ? order.line_items.map((i) => `${i.quantity} x ${i.name}`).join(', ')
-        : String(changes['products'] ?? '');
+    buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
+        const addr     = String(changes['address_1'] ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
+        const city     = String(changes['city']      ?? order.shipping?.city      ?? order.billing?.city      ?? '');
+        const stateRaw = String(changes['state']     ?? order.shipping?.state     ?? order.billing?.state     ?? '');
+        const province = this.resolveProvince(stateRaw);
+        const prods    = order.line_items?.length
+            ? order.line_items.map((i) => `${i.quantity} x ${i.name}`).join(', ')
+            : String(changes['products'] ?? '');
 
-    return (
-        `Gracias${firstName ? ` ${firstName}` : ''}. Aquí está el resumen actualizado:\n\n` +
-        `📦 *Productos:* ${prods}\n` +
-        `🏙️ *Ciudad:* ${city}\n` +
-        `📍 *Dirección:* ${addr}\n\n` +
-        `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
-    );
-}
+        return (
+            `Gracias${firstName ? ` ${firstName}` : ''}. Aquí está el resumen actualizado:\n\n` +
+            `📦 *Productos:* ${prods}\n` +
+            `🏙️ *Ciudad:* ${city}\n` +
+            `📍 *Dirección:* ${addr}\n` +
+            `🗺️ *Provincia:* ${province}\n\n` +
+            `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
+        );
+    }
+
     buildConfirmedMessage(firstName: string, orderId: string): string {
-    return (
-        `¡🎉 ${firstName ? firstName + ', ' : ''}gracias por confirmar tu pedido!\n\n` +
-        `Tu pedido *#${orderId}* ya está en proceso 📦.\n` +
-        `Cuando se genere la guía 🚚 te la compartiremos por aquí.\n\n` +
-        `Ten el pago listo cuando llegue el mensajero 💵\n` +
-        `Agradecemos tu confianza en *${this.store}* ${this.emoji}`
-    );
-}
+        return (
+            `¡🎉 ${firstName ? firstName + ', ' : ''}gracias por confirmar tu pedido!\n\n` +
+            `Tu pedido *#${orderId}* ya está en proceso 📦.\n` +
+            `Cuando se genere la guía 🚚 te la compartiremos por aquí.\n\n` +
+            `Ten el pago listo cuando llegue el mensajero 💵\n` +
+            `Agradecemos tu confianza en *${this.store}* ${this.emoji}`
+        );
+    }
 
     buildCancelledMessage(firstName: string): string {
         return (
@@ -157,14 +180,16 @@ async downloadMedia(mediaId: string): Promise<string> {
             `Responde *CONFIRMAR*, *MODIFICAR* o *CANCELAR*.`
         );
     }
-buildMainMenu(firstName: string): string {
-    return (
-        `${firstName ? `Hola ${firstName} 👋` : '👋'} ¿Qué deseas hacer con tu pedido?\n\n` +
-        `✅ *CONFIRMAR*\n` +
-        `✏️ *MODIFICAR*\n` +
-        `❌ *CANCELAR*`
-    );
-}
+
+    buildMainMenu(firstName: string): string {
+        return (
+            `${firstName ? `Hola ${firstName} 👋` : '👋'} ¿Qué deseas hacer con tu pedido?\n\n` +
+            `✅ *CONFIRMAR*\n` +
+            `✏️ *MODIFICAR*\n` +
+            `❌ *CANCELAR*`
+        );
+    }
+
     buildUnrecognizedMessage(): string {
         return (
             `No entendí tu respuesta 😊. Por favor responde:\n\n` +

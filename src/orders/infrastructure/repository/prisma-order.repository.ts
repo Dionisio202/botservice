@@ -142,7 +142,12 @@ async setReviewRequestedAt(orderId: number): Promise<void> {
             },
         });
     }
-
+async updateConvStepOnly(orderId: number, step: ConvStep): Promise<void> {
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  { conv_step: step },
+    });
+}
     private toEntity(row: {
         id: number; order_id: number; order_total: unknown;
         status: string; conv_step: string; attempts: number; max_attempts: number;
