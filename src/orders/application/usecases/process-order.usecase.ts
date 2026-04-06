@@ -39,12 +39,17 @@ export class ProcessOrderUseCase {
         if (riskResult.blocked) return { sessionId: -1 };
 
         const session = await this.orderRepo.create({
-            order_id:     wooOrder.id,
-            customer_id:  customer.id,
-            order_total:  Number(wooOrder.total),
-            order_items:  wooOrder.line_items as unknown as Prisma.InputJsonValue,
-            max_attempts: maxAttempts,
-        });
+    order_id:       wooOrder.id,
+    customer_id:    customer.id,
+    order_total:    Number(wooOrder.total),
+    order_items:    wooOrder.line_items as unknown as Prisma.InputJsonValue,
+    max_attempts:   maxAttempts,
+    initial_changes: {
+        address_1: wooOrder.billing.address_1 || wooOrder.shipping.address_1 || '',
+        city:      wooOrder.billing.city      || wooOrder.shipping.city      || '',
+        state:     wooOrder.billing.state     || wooOrder.shipping.state     || '',
+    } as unknown as Prisma.InputJsonValue,
+});
 
         if (riskResult.needsReview) {
             await this.customerRepo.flagAgentReview(phone, riskResult.reason ?? 'Score de riesgo elevado');
@@ -77,6 +82,7 @@ export class ProcessOrderUseCase {
         }
 
         const score = this.calculateScore(customer, pendingCount);
+        await this.customerRepo.updateRiskScore(phone, score);
 
         if (score >= riskConfig.blacklistThreshold) {
             await this.customerRepo.blacklist(customer.id, `Blacklist automático — score ${score}`, 0);

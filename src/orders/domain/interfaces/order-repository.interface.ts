@@ -30,4 +30,5 @@ export interface CreateOrderData {
     order_total:  number;
     order_items:  Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
     max_attempts: number;
+    initial_changes?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
 }

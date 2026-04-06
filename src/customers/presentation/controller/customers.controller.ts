@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { BlacklistCustomerUseCase } from '../../application/usecases/blacklist-customer.usecase';
 import { UnblacklistCustomerUseCase } from '../../application/usecases/unblacklist-customer.usecase';
 import { RecordLostUseCase } from '../../application/usecases/record-lost.usecase';
@@ -7,7 +7,18 @@ import { CustomersPresenter } from '../presenter/customers.presenter';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { Roles } from '../../../shared/decorators/roles.decorator';
+import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { PrismaService } from '../../../shared/database/prisma.service';
+import { IsBoolean, IsOptional } from 'class-validator';
+
+class ReviewOverrideDto {
+    @IsBoolean()
+    approved!: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    trustFully?: boolean;
+}
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -65,5 +76,35 @@ export class CustomersController {
         @Body() dto: RecordLostDto,
     ) {
         return this.recordLostUseCase.execute(phone, dto.amount);
+    }
+
+    @Patch(':phone/review-override')
+    @Roles('admin', 'agent')
+    async reviewOverride(
+        @Param('phone') phone: string,
+        @Body() dto: ReviewOverrideDto,
+        @CurrentUser() user: { id: number },
+    ) {
+        if (!dto.approved) {
+            const customer = await this.prisma.botCustomer.findUnique({ where: { phone } });
+            if (customer) {
+                await this.blacklistUseCase.execute({
+                    phone,
+                    reason:  'Escalado a blacklist por agente tras revisión manual',
+                    adminId: user.id,
+                });
+            }
+            return;
+        }
+
+        await this.prisma.botCustomer.update({
+            where: { phone },
+            data:  {
+                needs_agent_review:  false,
+                agent_review_reason: null,
+                risk_score:          0,
+                manually_trusted:    dto.trustFully ?? false,
+            },
+        });
     }
 }

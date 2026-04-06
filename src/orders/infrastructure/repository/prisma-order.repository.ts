@@ -81,22 +81,31 @@ async incrementUnrecognized(orderId: number): Promise<void> {
    async create(data: CreateOrderData): Promise<Order> {
     const row = await this.prisma.botOrderSession.create({
         data: {
-            order_id:     data.order_id,
-            customer_id:  data.customer_id,
-            order_total:  data.order_total,
-            order_items:  data.order_items,
-            max_attempts: data.max_attempts,
+            order_id:        data.order_id,
+            customer_id:     data.customer_id,
+            order_total:     data.order_total,
+            order_items:     data.order_items,
+            max_attempts:    data.max_attempts,
+            pending_changes: data.initial_changes ?? {},
         },
     });
     return this.toEntity(row);
 }
 
     async updateStatus(orderId: number, status: OrderStatus): Promise<void> {
-        await this.prisma.botOrderSession.update({
-            where: { order_id: orderId },
-            data:  { status, updated_at: new Date() },
-        });
-    }
+    const timestamps: Record<string, Date> = {};
+    if (status === 'cancelled') timestamps.cancelled_at = new Date();
+    if (status === 'delivered') timestamps.delivered_at = new Date();
+    if (status === 'expired')   timestamps.expired_at   = new Date();
+    if (status === 'shipped')   timestamps.shipped_at   = new Date();
+    if (status === 'lost')      timestamps.lost_at      = new Date();
+    if (status === 'returned')  timestamps.returned_at  = new Date();
+
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  { status, updated_at: new Date(), ...timestamps },
+    });
+}
 async countPendingByPhone(phone: string): Promise<number> {
     return this.prisma.botOrderSession.count({
         where: { status: 'pending', customer: { phone } },

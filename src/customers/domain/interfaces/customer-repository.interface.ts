@@ -10,4 +10,6 @@ export interface ICustomerRepository {
     recordExpired(phone: string): Promise<void>;
     recordLost(phone: string, amount: number): Promise<void>;
     flagAgentReview(phone: string, reason: string): Promise<void>;
+    updateRiskScore(phone: string, score: number): Promise<void>;
+    clearAgentReview(phone: string, trustFully?: boolean): Promise<void>;
 }
