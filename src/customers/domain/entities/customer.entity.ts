@@ -11,6 +11,7 @@ export class Customer {
         public readonly expired_sessions:    number,
         public readonly customer_tier:       string,
         public readonly manually_trusted:    boolean,
+        public readonly needs_agent_review:  boolean,
     ) {}
 
     isRisky(): boolean       { return this.lost_orders >= 3; }

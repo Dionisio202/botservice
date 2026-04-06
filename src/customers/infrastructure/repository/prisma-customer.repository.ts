@@ -82,12 +82,13 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         });
     }
 
-   private toEntity(row: {
+ private toEntity(row: {
     id: number; phone: string; customer_name: string | null;
     lost_orders: number; cancelled_orders: number;
     is_blacklisted: boolean; total_lost_amount: unknown;
     confirmed_orders: number; expired_sessions: number;
     customer_tier: string; manually_trusted: boolean;
+    needs_agent_review: boolean;
 }): Customer {
     return new Customer(
         row.id,
@@ -101,6 +102,7 @@ export class PrismaCustomerRepository implements ICustomerRepository {
         row.expired_sessions,
         row.customer_tier,
         row.manually_trusted,
+        row.needs_agent_review,
     );
 }
     async unblacklist(id: number): Promise<void> {

@@ -35,6 +35,7 @@ export class RetryOrderUseCase {
                 const customer = await this.customerRepo.findByPhone(session.phone);
 
                 if (customer?.manually_trusted === false && customer?.is_blacklisted) return;
+                if (customer?.needs_agent_review) return; 
 
                 const tier        = (customer?.customer_tier as CustomerTier) ?? 'new';
                 const maxAttempts = TIER_MAX_ATTEMPTS[tier] ?? 1;
