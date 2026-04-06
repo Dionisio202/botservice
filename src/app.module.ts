@@ -9,8 +9,11 @@ import { CustomersModule } from './customers/customers.module';
 import { OrdersModule } from './orders/orders.module';
 import { MessagesModule } from './messages/messages.module';
 import { PanelModule } from './panel/panel.module';
+import { AppController } from './health.controller';
 
 @Module({
+        controllers: [AppController],
+
     imports: [
         ConfigModule.forRoot({ isGlobal: true }),
         ScheduleModule.forRoot(),
