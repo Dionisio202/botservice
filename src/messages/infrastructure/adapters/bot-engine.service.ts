@@ -316,12 +316,12 @@ if (count >= limit) {
             await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
             return;
         }
-        if (matches(input, YES_KW)) {
-            await this.orderRepo.updateStatus(session!.order_id, 'confirmed');
-            await this.customerRepo.recordConfirmed(phone);
-            await this.whatsApp.sendText(phone, this.whatsApp.buildConfirmedMessage('', session!.order_id.toString()));
-
-        } else if (matches(input, NO_KW)) {
+     if (matches(input, YES_KW)) {
+    await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
+    await this.whatsApp.sendText(phone, 
+        `✅ Cambios guardados.\n\n` + this.whatsApp.buildMainMenu('')
+    );
+}else if (matches(input, NO_KW)) {
             await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_modify_field');
             await this.whatsApp.sendText(phone, this.whatsApp.buildAskWhatToModify(''));
 

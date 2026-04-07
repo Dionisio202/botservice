@@ -71,7 +71,7 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         const city        = order.billing.city     || order.shipping.city     || '';
         const province    = this.resolveProvince(order.billing.state || order.shipping.state || '');
         const address     = order.billing.address_1 || order.shipping.address_1 || '';
-        const location    = [city, province, address].filter(Boolean).join(' - ');
+        const location    = [ province,city, address].filter(Boolean).join(' - ');
 
         const data = await this.post<MetaApiResponse>({
             messaging_product: 'whatsapp',
@@ -145,9 +145,9 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         return (
             `Gracias${firstName ? ` ${firstName}` : ''}. Aquí está el resumen actualizado:\n\n` +
             `📦 *Productos:* ${prods}\n` +
+            `🗺️ *Provincia:* ${province}\n\n` +
             `🏙️ *Ciudad:* ${city}\n` +
             `📍 *Dirección:* ${addr}\n` +
-            `🗺️ *Provincia:* ${province}\n\n` +
             `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
         );
     }
