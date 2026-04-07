@@ -259,41 +259,45 @@ if (count >= limit) {
         await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
     }
 
-    private async handleNewName(session: Session, input: string, phone: string): Promise<void> {
-        if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
-            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
-            return;
-        }
-        const trimmed = input.trim();
-        if (trimmed.length < 3 || !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(trimmed)) {
-            const silenced = await this.incrementAndCheck(session, phone, 'Nombre inválido repetido');
-            if (silenced) return;
-            await this.whatsApp.sendText(phone, `Escríbeme el nombre completo solo con letras. 👤\n\n*0* → Volver al menú`);
-            return;
-        }
-        const changes = { ...(session!.pending_changes ?? {}), billing_first_name: trimmed };
-        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
+   private async handleNewName(session: Session, input: string, phone: string): Promise<void> {
+    if (normalize(input) === '0') {
+        await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
+        await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+        return;
     }
+    const trimmed = input.trim();
+    if (trimmed.length < 3 || !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(trimmed)) {
+        const silenced = await this.incrementAndCheck(session, phone, 'Nombre inválido repetido');
+        if (silenced) return;
+        await this.whatsApp.sendText(phone, `Escríbeme el nombre completo solo con letras. 👤\n\n*0* → Volver al menú`);
+        return;
+    }
+    const changes = { ...(session!.pending_changes ?? {}), billing_first_name: trimmed };
+    await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
 
-    private async handleNewPhone(session: Session, input: string, phone: string): Promise<void> {
-        if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
-            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
-            return;
-        }
-        try {
-            const normalized = normalizePhone(input.trim());
-            const changes = { ...(session!.pending_changes ?? {}), billing_phone: normalized };
-            await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-            await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
-        } catch {
-            const silenced = await this.incrementAndCheck(session, phone, 'Teléfono inválido repetido');
-            if (silenced) return;
-            await this.whatsApp.sendText(phone, `Ingresa un número válido de Ecuador. 📱\n\nEjemplo: 0991234567\n\n*0* → Volver al menú`);
-        }
+    const updatedSession = { ...session, pending_changes: changes };
+    await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(updatedSession as Session), changes));
+}
+
+   private async handleNewPhone(session: Session, input: string, phone: string): Promise<void> {
+    if (normalize(input) === '0') {
+        await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
+        await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+        return;
     }
+    try {
+        const normalized = normalizePhone(input.trim());
+        const changes = { ...(session!.pending_changes ?? {}), billing_phone: normalized };
+        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
+
+        const updatedSession = { ...session, pending_changes: changes };
+        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(updatedSession as Session), changes));
+    } catch {
+        const silenced = await this.incrementAndCheck(session, phone, 'Teléfono inválido repetido');
+        if (silenced) return;
+        await this.whatsApp.sendText(phone, `Ingresa un número válido de Ecuador. 📱\n\nEjemplo: 0991234567\n\n*0* → Volver al menú`);
+    }
+}
 
     private async handleNewQuantity(session: Session, input: string, phone: string): Promise<void> {
     if (normalize(input) === '0') {

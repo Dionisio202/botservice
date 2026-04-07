@@ -154,7 +154,12 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
     if (name)  summary += `👤 *Nombre:* ${name}\n`;
     if (phone) summary += `📱 *Teléfono:* ${phone}\n`;
 
-    summary += `\n¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`;
+   const total = order.line_items?.length
+    ? order.line_items.reduce((sum, i) => sum + (Number(i.price) * i.quantity), 0)
+    : Number(order.total ?? 0);
+
+summary += `💵 *Total:* $${total.toFixed(2)}\n`;
+summary += `\n¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`;
 
     return summary;
 }
