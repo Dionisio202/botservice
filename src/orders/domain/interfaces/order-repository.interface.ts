@@ -22,12 +22,13 @@ export interface IOrderRepository {
 findLastSessionByPhone(phone: string): Promise<(Order & { phone: string }) | null>;
 setReviewRequestedAt(orderId: number): Promise<void>;
 updateConvStepOnly(orderId: number, step: ConvStep): Promise<void>;
-
+updateOrderItems(orderId: number, items: unknown, newTotal: number): Promise<void>;
 }
 
 export interface CreateOrderData {
     order_id:     number;
     customer_id:  number;
+    customer_name?: string;
     order_total:  number;
     order_items:  Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
     max_attempts: number;

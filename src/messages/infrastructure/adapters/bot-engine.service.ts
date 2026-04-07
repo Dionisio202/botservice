@@ -98,20 +98,23 @@ if (count >= limit) {
         return false;
     }
 
-    private buildOrderFromSession(session: Session): WooOrderDto {
-        const items = Array.isArray(session!.order_items)
-            ? (session!.order_items as Array<{ name: string; quantity: number; price: string }>)
-            : [];
+   private buildOrderFromSession(session: Session): WooOrderDto {
+    const items = Array.isArray(session!.order_items)
+        ? (session!.order_items as Array<{ name: string; quantity: number; price: string | number }>)
+        : [];
 
-        return {
-            id:         session!.order_id,
-            total:      String(session!.order_total ?? ''),
-            status:     'pending',
-            billing:    { first_name: '', last_name: '', phone: session!.phone, city: '', state: '', address_1: '' },
-            shipping:   { address_1: '', city: '', state: '' },
-            line_items: items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-        };
-    }
+    const changes = (session!.pending_changes ?? {}) as Record<string, unknown>;
+    const firstName = String(changes['billing_first_name'] ?? '');
+
+    return {
+        id:         session!.order_id,
+        total:      String(session!.order_total ?? ''),
+        status:     'pending',
+        billing:    { first_name: firstName, last_name: '', phone: session!.phone, city: '', state: '', address_1: '' },
+        shipping:   { address_1: '', city: '', state: '' },
+        line_items: items.map(i => ({ name: i.name, quantity: i.quantity, price: String(i.price) })),
+    };
+}
 
     private async handleNoSession(
         phone: string,
@@ -293,22 +296,42 @@ if (count >= limit) {
     }
 
     private async handleNewQuantity(session: Session, input: string, phone: string): Promise<void> {
-        if (normalize(input) === '0') {
-            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
-            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
-            return;
-        }
-        const qty = parseInt(input.trim(), 10);
-        if (isNaN(qty) || qty <= 0) {
-            const silenced = await this.incrementAndCheck(session, phone, 'Cantidad inválida repetida');
-            if (silenced) return;
-            await this.whatsApp.sendText(phone, `Ingresa un número válido mayor a 0. 📦\n\n*0* → Volver al menú`);
-            return;
-        }
-        const changes = { ...(session!.pending_changes ?? {}), quantity: qty };
-        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(session), changes));
+    if (normalize(input) === '0') {
+        await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
+        await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+        return;
     }
+    const qty = parseInt(input.trim(), 10);
+    if (isNaN(qty) || qty <= 0) {
+        const silenced = await this.incrementAndCheck(session, phone, 'Cantidad inválida repetida');
+        if (silenced) return;
+        await this.whatsApp.sendText(phone, `Ingresa un número válido mayor a 0. 📦\n\n*0* → Volver al menú`);
+        return;
+    }
+
+    const items = Array.isArray(session!.order_items)
+        ? (session!.order_items as Array<{ name: string; quantity: number; price: number; subtotal: string; total: string; [key: string]: unknown }>)
+        : [];
+
+    const updatedItems = items.map(item => ({
+        ...item,
+        quantity: qty,
+        subtotal: String(Number(item.price) * qty),
+        total:    String(Number(item.price) * qty),
+    }));
+
+    const newTotal = updatedItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
+
+    await this.orderRepo.updateOrderItems(session!.order_id, updatedItems, newTotal);
+
+    const changes = { ...(session!.pending_changes ?? {}) };
+    delete (changes as Record<string, unknown>)['quantity'];
+
+    await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', changes);
+
+    const updatedSession = { ...session, order_items: updatedItems, order_total: newTotal };
+    await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(updatedSession as Session), changes));
+}
 
     private async handleConfirmChanges(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {

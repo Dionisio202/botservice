@@ -133,24 +133,31 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
         return `Por favor, escríbeme la nueva ciudad de entrega. 🏙️`;
     }
 
-    buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
-        const addr     = String(changes['address_1'] ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
-        const city     = String(changes['city']      ?? order.shipping?.city      ?? order.billing?.city      ?? '');
-        const stateRaw = String(changes['state']     ?? order.shipping?.state     ?? order.billing?.state     ?? '');
-        const province = this.resolveProvince(stateRaw);
-        const prods    = order.line_items?.length
-            ? order.line_items.map((i) => `${i.quantity} x ${i.name}`).join(', ')
-            : String(changes['products'] ?? '');
+ buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
+    const addr     = String(changes['address_1']          ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
+    const city     = String(changes['city']               ?? order.shipping?.city      ?? order.billing?.city      ?? '');
+    const stateRaw = String(changes['state']              ?? order.shipping?.state     ?? order.billing?.state     ?? '');
+    const province = this.resolveProvince(stateRaw);
+    const phone    = String(changes['billing_phone']      ?? '');
+    const name     = order.billing?.first_name            ?? '';
+    const prods    = order.line_items?.length
+        ? order.line_items.map((i) => `${i.quantity} x ${i.name}`).join(', ')
+        : '';
 
-        return (
-            `Gracias${firstName ? ` ${firstName}` : ''}. Aquí está el resumen actualizado:\n\n` +
-            `📦 *Productos:* ${prods}\n` +
-            `🗺️ *Provincia:* ${province}\n\n` +
-            `🏙️ *Ciudad:* ${city}\n` +
-            `📍 *Dirección:* ${addr}\n` +
-            `¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`
-        );
-    }
+    let summary =
+        `Gracias${name ? ` ${name}` : ''}. Aquí está el resumen actualizado:\n\n` +
+        `📦 *Productos:* ${prods}\n` +
+        `🗺️ *Provincia:* ${province}\n` +
+        `🏙️ *Ciudad:* ${city}\n` +
+        `📍 *Dirección:* ${addr}\n`;
+
+    if (name)  summary += `👤 *Nombre:* ${name}\n`;
+    if (phone) summary += `📱 *Teléfono:* ${phone}\n`;
+
+    summary += `\n¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`;
+
+    return summary;
+}
 
     buildConfirmedMessage(firstName: string, orderId: string): string {
         return (

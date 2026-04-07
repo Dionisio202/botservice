@@ -36,6 +36,15 @@ export class PrismaOrderRepository implements IOrderRepository {
         order_total:        Number(row.order_total),
     });
 }
+async updateOrderItems(orderId: number, items: unknown, newTotal: number): Promise<void> {
+    await this.prisma.botOrderSession.update({
+        where: { order_id: orderId },
+        data:  {
+            order_items: items as Prisma.InputJsonValue,
+            order_total: newTotal,
+        },
+    });
+}
 async saveRating(orderId: number, rating: number): Promise<void> {
     await this.prisma.botOrderSession.update({
         where: { order_id: orderId },
@@ -83,6 +92,7 @@ async incrementUnrecognized(orderId: number): Promise<void> {
         data: {
             order_id:        data.order_id,
             customer_id:     data.customer_id,
+            customer_name:   data.customer_name ?? null,
             order_total:     data.order_total,
             order_items:     data.order_items,
             max_attempts:    data.max_attempts,

@@ -41,6 +41,7 @@ export class ProcessOrderUseCase {
         const session = await this.orderRepo.create({
     order_id:       wooOrder.id,
     customer_id:    customer.id,
+    customer_name:  name ,
     order_total:    Number(wooOrder.total),
     order_items:    wooOrder.line_items as unknown as Prisma.InputJsonValue,
     max_attempts:   maxAttempts,
