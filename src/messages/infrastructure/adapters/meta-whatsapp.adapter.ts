@@ -67,7 +67,10 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
     }
 
     async sendConfirmationTemplate(order: WooOrderDto, phone: string): Promise<string> {
-        const productList = order.line_items.map((i) => `• ${i.name} x${i.quantity}`).join('\n');
+        const items = order.line_items.map((i) => `${i.name} x${i.quantity}`);
+const productList = items.length > 6
+    ? items.slice(0, 5).join(', ') + ` y ${items.length - 5} producto(s) más`
+    : items.join(', ');
         const city        = order.billing.city     || order.shipping.city     || '';
         const province    = this.resolveProvince(order.billing.state || order.shipping.state || '');
         const address     = order.billing.address_1 || order.shipping.address_1 || '';
@@ -89,7 +92,7 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
                             { type: 'text', text: this.store },
                             { type: 'text', text: String(order.id) },
                             { type: 'text', text: productList },
-                            { type: 'text', text: `$${order.total}` },
+                            { type: 'text', text: order.total },
                             { type: 'text', text: location },
                         ],
                     },
