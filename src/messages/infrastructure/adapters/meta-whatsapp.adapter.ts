@@ -69,9 +69,8 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
     async sendConfirmationTemplate(order: WooOrderDto, phone: string): Promise<string> {
     const items = order.line_items.map((i) => `${i.quantity} x ${i.name}`);
     const productList = items.length > 6
-        ? items.slice(0, 5).join('\n') + `\ny ${items.length - 5} producto(s) más`
-        : items.join('\n');
-
+    ? items.slice(0, 5).map((i) => `• ${i}`).join('  ') + `  y ${items.length - 5} más`
+    : items.map((i) => `• ${i}`).join('  ');
     const city     = order.billing.city      || order.shipping.city      || '';
     const province = this.resolveProvince(order.billing.state || order.shipping.state || '');
     const address  = order.billing.address_1 || order.shipping.address_1 || '';
