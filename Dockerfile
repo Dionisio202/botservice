@@ -20,7 +20,6 @@ COPY prisma ./prisma
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY public ./public
 
 EXPOSE 3000
