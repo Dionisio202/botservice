@@ -1,0 +1,27 @@
+name: Deploy Bot to VPS
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 69.62.67.50
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY_BOT }}
+          script: |
+            cd /opt/botecuentrega
+            git pull origin develop
+            docker compose build --no-cache
+            docker compose up -d --remove-orphans
+            docker image prune -f
+            docker compose ps
