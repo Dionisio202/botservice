@@ -8,6 +8,7 @@ export type ConvStep =
     | 'awaiting_new_name'
     | 'awaiting_new_phone'
     | 'awaiting_new_quantity'
+    | 'awaiting_select_product'
     | 'awaiting_confirm_changes'
     | 'awaiting_review'
     | 'done';

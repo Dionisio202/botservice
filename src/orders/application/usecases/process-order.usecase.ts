@@ -7,7 +7,7 @@ import type { WooOrderDto } from '../dtos/order.dto';
 import { normalizePhone } from '../../infrastructure/utils/phone.utils';
 import { Prisma } from '@prisma/client';
 
-const TIER_MAX_PENDING = { new: 1, regular: 2, loyal: 3 } as const;
+const TIER_MAX_PENDING = { new: 1, regular: 3, loyal: 4 } as const;
 type CustomerTier = keyof typeof TIER_MAX_PENDING;
 
 @Injectable()

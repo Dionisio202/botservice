@@ -5,9 +5,10 @@ export interface WooLineItem {
 }
 
 export interface WooOrderDto {
-    id:         number;
-    total:      string;
-    status:     string;
+    id:             number;
+    total:          string;
+    shipping_total: string;
+    status:         string;
     billing: {
         first_name: string;
         last_name:  string;

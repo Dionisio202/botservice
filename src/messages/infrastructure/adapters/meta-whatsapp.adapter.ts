@@ -67,44 +67,48 @@ export class MetaWhatsAppAdapter implements IWhatsAppAdapter {
     }
 
     async sendConfirmationTemplate(order: WooOrderDto, phone: string): Promise<string> {
-        const items = order.line_items.map((i) => `${i.name} x${i.quantity}`);
-const productList = items.length > 6
-    ? items.slice(0, 5).join(', ') + ` y ${items.length - 5} producto(s) más`
-    : items.join(', ');
-        const city        = order.billing.city     || order.shipping.city     || '';
-        const province    = this.resolveProvince(order.billing.state || order.shipping.state || '');
-        const address     = order.billing.address_1 || order.shipping.address_1 || '';
-        const location    = [ province,city, address].filter(Boolean).join(' - ');
+    const items = order.line_items.map((i) => `${i.quantity} x ${i.name}`);
+    const productList = items.length > 6
+        ? items.slice(0, 5).join('\n') + `\ny ${items.length - 5} producto(s) más`
+        : items.join('\n');
 
-        const data = await this.post<MetaApiResponse>({
-            messaging_product: 'whatsapp',
-            to:   normalizePhone(phone),
-            type: 'template',
-            template: {
-                name:     process.env.WA_TEMPLATE_NAME     ?? 'confirmar_pedido',
-                language: { code: process.env.WA_TEMPLATE_LANGUAGE ?? 'es_EC' },
-                components: [
-                    {
-                        type: 'body',
-                        parameters: [
-                            { type: 'text', text: order.billing.first_name },
-                            { type: 'text', text: this.agent },
-                            { type: 'text', text: this.store },
-                            { type: 'text', text: String(order.id) },
-                            { type: 'text', text: productList },
-                            { type: 'text', text: order.total },
-                            { type: 'text', text: location },
-                        ],
-                    },
-                    { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'CONFIRM' }] },
-                    { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'MODIFY'  }] },
-                    { type: 'button', sub_type: 'quick_reply', index: '2', parameters: [{ type: 'payload', payload: 'CANCEL'  }] },
-                ],
-            },
-        });
+    const city     = order.billing.city      || order.shipping.city      || '';
+    const province = this.resolveProvince(order.billing.state || order.shipping.state || '');
+    const address  = order.billing.address_1 || order.shipping.address_1 || '';
+    const location = [province, city, address].filter(Boolean).join(' - ');
 
-        return data.messages[0]?.id ?? '';
-    }
+   const shippingTotal = parseFloat(order.shipping_total ?? '0');
+const shippingLabel = shippingTotal > 0 ? `$${shippingTotal.toFixed(2)} — entrega a domicilio` : 'Gratuito';
+    const data = await this.post<MetaApiResponse>({
+        messaging_product: 'whatsapp',
+        to:   normalizePhone(phone),
+        type: 'template',
+        template: {
+            name:     process.env.WA_TEMPLATE_NAME     ?? 'confirmar_pedido_v2',
+            language: { code: process.env.WA_TEMPLATE_LANGUAGE ?? 'es_EC' },
+            components: [
+                {
+                    type: 'body',
+                    parameters: [
+                        { type: 'text', text: order.billing.first_name },
+                        { type: 'text', text: this.agent },
+                        { type: 'text', text: this.store },
+                        { type: 'text', text: String(order.id) },
+                        { type: 'text', text: productList },
+                        { type: 'text', text: order.total },
+                        { type: 'text', text: location },
+                        { type: 'text', text: shippingLabel },
+                    ],
+                },
+                { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'CONFIRM' }] },
+                { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'MODIFY'  }] },
+                { type: 'button', sub_type: 'quick_reply', index: '2', parameters: [{ type: 'payload', payload: 'CANCEL'  }] },
+            ],
+        },
+    });
+
+    return data.messages[0]?.id ?? '';
+}
 
     async sendText(phone: string, text: string): Promise<void> {
         await this.post({
@@ -136,33 +140,33 @@ const productList = items.length > 6
         return `Por favor, escríbeme la nueva ciudad de entrega. 🏙️`;
     }
 
- buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
-    const addr     = String(changes['address_1']          ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
-    const city     = String(changes['city']               ?? order.shipping?.city      ?? order.billing?.city      ?? '');
-    const stateRaw = String(changes['state']              ?? order.shipping?.state     ?? order.billing?.state     ?? '');
+buildChangeSummary(firstName: string, order: WooOrderDto, changes: Record<string, unknown>): string {
+    const addr     = String(changes['address_1'] ?? order.shipping?.address_1 ?? order.billing?.address_1 ?? '');
+    const city     = String(changes['city']      ?? order.shipping?.city      ?? order.billing?.city      ?? '');
+    const stateRaw = String(changes['state']     ?? order.shipping?.state     ?? order.billing?.state     ?? '');
     const province = this.resolveProvince(stateRaw);
-    const phone    = String(changes['billing_phone']      ?? '');
-    const name     = order.billing?.first_name            ?? '';
-    const prods    = order.line_items?.length
-        ? order.line_items.map((i) => `${i.quantity} x ${i.name}`).join(', ')
+    const phone    = String(changes['billing_phone'] ?? '');
+    const name     = String(changes['billing_first_name'] ?? order.billing?.first_name ?? '');
+
+    const itemLines = order.line_items?.length
+        ? order.line_items.map((i) => `  • ${i.quantity} x ${i.name} — $${(Number(i.price) * i.quantity).toFixed(2)}`).join('\n')
         : '';
+
+    const total = order.line_items?.length
+        ? order.line_items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0)
+        : Number(order.total ?? 0);
 
     let summary =
         `Gracias${name ? ` ${name}` : ''}. Aquí está el resumen actualizado:\n\n` +
-        `📦 *Productos:* ${prods}\n` +
+        `📦 *Productos:*\n${itemLines}\n\n` +
         `🗺️ *Provincia:* ${province}\n` +
         `🏙️ *Ciudad:* ${city}\n` +
         `📍 *Dirección:* ${addr}\n`;
 
-    if (name)  summary += `👤 *Nombre:* ${name}\n`;
     if (phone) summary += `📱 *Teléfono:* ${phone}\n`;
 
-   const total = order.line_items?.length
-    ? order.line_items.reduce((sum, i) => sum + (Number(i.price) * i.quantity), 0)
-    : Number(order.total ?? 0);
-
-summary += `💵 *Total:* $${total.toFixed(2)}\n`;
-summary += `\n¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`;
+    summary += `💵 *Total:* $${total.toFixed(2)}\n`;
+    summary += `\n¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`;
 
     return summary;
 }
@@ -213,7 +217,12 @@ summary += `\n¿Confirmas que los datos son correctos? Responde *SÍ* o *NO*.`;
             `❌ *CANCELAR* para cancelar`
         );
     }
-
+buildAskSelectProduct(items: Array<{ name: string; quantity: number }>): string {
+    const list = items
+        .map((item, i) => `*${i + 1}* → ${item.name} (cantidad actual: ${item.quantity})`)
+        .join('\n');
+    return `¿Qué producto deseas modificar? 📦\n\n${list}\n\n*0* → Volver al menú`;
+}
     buildBlockedMessage(): string {
         return `Lo sentimos, no podemos procesar tu pedido en este momento. Por favor comunícate con nosotros directamente.`;
     }
