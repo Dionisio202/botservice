@@ -1,5 +1,5 @@
 import { IsString, IsNotEmpty, IsNumber, IsPositive } from 'class-validator';
-
+//ts
 export class BlacklistDto {
     @IsString()
     @IsNotEmpty()
