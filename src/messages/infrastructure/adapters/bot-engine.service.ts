@@ -265,58 +265,58 @@ export class BotEngineService {
         );
     }
 
-    private async handleNewQuantity(session: Session, input: string, phone: string): Promise<void> {
-        if (normalize(input) === '0' || normalize(input) === 'menu') {
-            await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
-            await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
-            return;
-        }
-
-        const qty     = parseInt(input.trim(), 10);
-        const items   = this.sessionItems(session);
-        const changes = (session!.pending_changes ?? {}) as Record<string, unknown>;
-        const index   = typeof changes['selected_product_index'] === 'number'
-            ? changes['selected_product_index']
-            : 0;
-
-        if (isNaN(qty) || qty < 0) {
-            const silenced = await this.incrementAndCheck(session, phone, 'Cantidad inválida repetida');
-            if (silenced) return;
-            await this.whatsApp.sendText(phone, `Ingresa un número válido o *0* para eliminar el producto. 📦\n\n*menu* → Volver al menú`);
-            return;
-        }
-
-        let updatedItems: OrderItem[];
-
-        if (qty === 0) {
-            updatedItems = items.filter((_, i) => i !== index);
-        } else {
-            updatedItems = items.map((item, i) =>
-                i === index
-                    ? { ...item, quantity: qty, subtotal: String(Number(item.price) * qty), total: String(Number(item.price) * qty) }
-                    : item,
-            );
-        }
-
-        if (updatedItems.length === 0) {
-            await this.orderRepo.updateStatus(session!.order_id, 'cancelled');
-            await this.customerRepo.recordCancelled(phone);
-            await this.whatsApp.sendText(
-                phone,
-                `Tu pedido no tiene más productos, así que fue cancelado automáticamente ❌.\nPuedes realizar un nuevo pedido cuando gustes 🌿`,
-            );
-            return;
-        }
-
-        const newTotal = updatedItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
-        await this.orderRepo.updateOrderItems(session!.order_id, updatedItems, newTotal);
-
-        const { selected_product_index: _, ...cleanChanges } = changes as Record<string, unknown> & { selected_product_index?: unknown };
-        await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', cleanChanges);
-
-        const updatedSession = { ...session, order_items: updatedItems, order_total: newTotal };
-        await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(updatedSession as Session), cleanChanges));
+  private async handleNewQuantity(session: Session, input: string, phone: string): Promise<void> {
+    if (normalize(input) === 'menu') {
+        await this.orderRepo.updateConvStepOnly(session!.order_id, 'awaiting_action');
+        await this.whatsApp.sendText(phone, this.whatsApp.buildMainMenu(''));
+        return;
     }
+
+    const qty     = parseInt(input.trim(), 10);
+    const items   = this.sessionItems(session);
+    const changes = (session!.pending_changes ?? {}) as Record<string, unknown>;
+    const index   = typeof changes['selected_product_index'] === 'number'
+        ? changes['selected_product_index']
+        : 0;
+
+    if (isNaN(qty) || qty < 0) {
+        const silenced = await this.incrementAndCheck(session, phone, 'Cantidad inválida repetida');
+        if (silenced) return;
+        await this.whatsApp.sendText(phone, `Ingresa un número válido o *0* para eliminar el producto. 📦\n\n*menu* → Volver al menú`);
+        return;
+    }
+
+    let updatedItems: OrderItem[];
+
+    if (qty === 0) {
+        updatedItems = items.filter((_, i) => i !== index);
+    } else {
+        updatedItems = items.map((item, i) =>
+            i === index
+                ? { ...item, quantity: qty, subtotal: String(Number(item.price) * qty), total: String(Number(item.price) * qty) }
+                : item,
+        );
+    }
+
+    if (updatedItems.length === 0) {
+        await this.orderRepo.updateStatus(session!.order_id, 'cancelled');
+        await this.customerRepo.recordCancelled(phone);
+        await this.whatsApp.sendText(
+            phone,
+            `Tu pedido no tiene más productos, así que fue cancelado automáticamente ❌.\nPuedes realizar un nuevo pedido cuando gustes 🌿`,
+        );
+        return;
+    }
+
+    const newTotal = updatedItems.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
+    await this.orderRepo.updateOrderItems(session!.order_id, updatedItems, newTotal);
+
+    const { selected_product_index: _, ...cleanChanges } = changes as Record<string, unknown> & { selected_product_index?: unknown };
+    await this.orderRepo.updateConvStep(session!.order_id, 'awaiting_confirm_changes', cleanChanges);
+
+    const updatedSession = { ...session, order_items: updatedItems, order_total: newTotal };
+    await this.whatsApp.sendText(phone, this.whatsApp.buildChangeSummary('', this.buildOrderFromSession(updatedSession as Session), cleanChanges));
+}
 
     private async handleNewAddress(session: Session, input: string, phone: string): Promise<void> {
         if (normalize(input) === '0') {
