@@ -1,18 +1,20 @@
-name: Deploy Bot to VPS
+name: Deploy to VPS
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
+    paths:
+      - 'Backend/**'
+      - 'FrontEnd/**'
 
 jobs:
-  deploy:
+  deploy-backend:
     runs-on: ubuntu-latest
-
+    if: contains(toJson(github.event.commits.*.modified + github.event.commits.*.added), 'Backend/')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy to VPS
+      - name: Deploy Backend
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 69.62.67.50
@@ -21,7 +23,27 @@ jobs:
           script: |
             cd /opt/botecuentrega
             git pull origin develop
-            docker compose build --no-cache
-            docker compose up -d --remove-orphans
+            docker compose build --no-cache bot
+            docker compose up -d --remove-orphans bot
+            docker image prune -f
+            docker compose ps
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    if: contains(toJson(github.event.commits.*.modified + github.event.commits.*.added), 'FrontEnd/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Frontend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 69.62.67.50
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY_BOT }}
+          script: |
+            cd /opt/botecuentrega
+            git pull origin develop
+            docker compose build --no-cache frontend
+            docker compose up -d --remove-orphans frontend
             docker image prune -f
             docker compose ps
