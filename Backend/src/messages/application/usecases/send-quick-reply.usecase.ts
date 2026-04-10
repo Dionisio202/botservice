@@ -12,16 +12,17 @@ export class SendQuickReplyUseCase {
         private readonly messageRepo: IMessageRepository,
     ) {}
 
-    async execute(phone: string, content: string, customerId: number, agentId: number): Promise<void> {
+    async execute(phone: string, content: string, customerId: number, agentId: number, sessionId?: number): Promise<void> {
         const normalized = normalizePhone(phone);
         await this.whatsApp.sendText(normalized, content);
 
         await this.messageRepo.create({
-            customer_id: customerId,
-            direction:   'outbound',
-            msg_type:    'text',
+            customer_id:      customerId,
+            order_session_id: sessionId,
+            direction:        'outbound',
+            msg_type:         'text',
             content,
-            sent_by:     agentId,
+            sent_by:          agentId,
         });
     }
 }

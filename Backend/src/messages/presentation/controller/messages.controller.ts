@@ -34,7 +34,7 @@ export class MessagesController {
     @Post('send')
     @Roles('admin', 'agent')
     send(
-        @Body() body: { phone: string; content: string; customerId: number },
+        @Body() body: { phone: string; content: string; customerId: number; session_id?: number },
         @CurrentUser() user: { id: number },
     ) {
         return this.sendQuickReplyUseCase.execute(
@@ -42,6 +42,7 @@ export class MessagesController {
             body.content,
             body.customerId,
             user.id,
+            body.session_id,
         );
     }
 
