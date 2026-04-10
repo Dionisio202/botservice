@@ -1,5 +1,3 @@
-node_modules/
-dist/
 .env
-*.log
-.pnpm-debug.log
+Backend/.env
+FrontEnd/.env
