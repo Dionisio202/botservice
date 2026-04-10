@@ -3,18 +3,26 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
-    paths:
-      - 'Backend/**'
-      - 'FrontEnd/**'
 
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
-    if: contains(toJson(github.event.commits.*.modified + github.event.commits.*.added), 'Backend/')
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check Backend changes
+        id: check
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q '^Backend/'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Deploy Backend
+        if: steps.check.outputs.changed == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 69.62.67.50
@@ -30,11 +38,22 @@ jobs:
 
   deploy-frontend:
     runs-on: ubuntu-latest
-    if: contains(toJson(github.event.commits.*.modified + github.event.commits.*.added), 'FrontEnd/')
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check Frontend changes
+        id: check
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q '^FrontEnd/'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Deploy Frontend
+        if: steps.check.outputs.changed == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 69.62.67.50
