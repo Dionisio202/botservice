@@ -11,6 +11,7 @@ import { SendMediaUseCase } from '../../application/usecases/send-media.usecase'
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { MessagesPresenter } from '../presenter/messages.presenter';
+import { SendMessageDto } from '../../application/dtos/send-message.dto';
 
 @Controller('messages')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -34,7 +35,7 @@ export class MessagesController {
     @Post('send')
     @Roles('admin', 'agent')
     send(
-        @Body() body: { phone: string; content: string; customerId: number; session_id?: number },
+        @Body() body: SendMessageDto,
         @CurrentUser() user: { id: number },
     ) {
         return this.sendQuickReplyUseCase.execute(
