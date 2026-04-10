@@ -22,7 +22,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_BOT }}
           script: |
             cd /opt/botecuentrega
-            git pull origin develop
+            git pull origin main
             docker compose build --no-cache bot
             docker compose up -d --remove-orphans bot
             docker image prune -f
@@ -42,7 +42,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_BOT }}
           script: |
             cd /opt/botecuentrega
-            git pull origin develop
+            git pull origin main
             docker compose build --no-cache frontend
             docker compose up -d --remove-orphans frontend
             docker image prune -f
