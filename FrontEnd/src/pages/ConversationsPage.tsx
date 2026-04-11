@@ -43,6 +43,67 @@ const ACTION_TOOLTIPS: Record<string, string> = {
     escalar_blacklist: 'Bloquea permanentemente al cliente. El bot lo ignorará para siempre.',
 };
 
+interface ConfirmModal {
+    title:       string;
+    description: string;
+    consequence: string;
+    confirmText: string;
+    danger:      boolean;
+    onConfirm:   () => void;
+}
+
+function ConfirmationModal({ modal, onClose }: { modal: ConfirmModal; onClose: () => void }) {
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+            <div className="relative bg-bg border border-border rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                        modal.danger ? 'bg-danger/10' : 'bg-success/10'
+                    }`}>
+                        {modal.danger
+                            ? <AlertTriangle size={18} className="text-danger" />
+                            : <CheckCircle size={18} className="text-success" />
+                        }
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-text">{modal.title}</p>
+                        <p className="text-xs text-text-muted mt-1">{modal.description}</p>
+                    </div>
+                </div>
+
+                <div className={`rounded-xl px-4 py-3 border text-xs ${
+                    modal.danger
+                        ? 'bg-danger/5 border-danger/20 text-danger'
+                        : 'bg-success/5 border-success/20 text-success'
+                }`}>
+                    <p className="font-medium mb-1">¿Qué va a pasar?</p>
+                    <p className="text-text-muted">{modal.consequence}</p>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 text-xs px-4 py-2.5 border border-border rounded-xl text-text-muted hover:text-text hover:bg-surface transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={() => { modal.onConfirm(); onClose(); }}
+                        className={`flex-1 text-xs px-4 py-2.5 rounded-xl text-white transition-colors ${
+                            modal.danger
+                                ? 'bg-danger hover:opacity-90'
+                                : 'bg-success hover:opacity-90'
+                        }`}
+                    >
+                        {modal.confirmText}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function Tooltip({ text }: { text: string }) {
     return (
         <span className="ml-auto pl-2 text-text-muted hover:text-text cursor-help group relative">
@@ -157,6 +218,7 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
     const [showLostInput, setShowLostInput]       = useState(false);
     const [showActions, setShowActions]           = useState(false);
     const [mediaPreview, setMediaPreview]         = useState<File | null>(null);
+    const [confirmModal, setConfirmModal]         = useState<ConfirmModal | null>(null);
     const bottomRef                               = useRef<HTMLDivElement>(null);
     const fileRef                                 = useRef<HTMLInputElement>(null);
 
@@ -184,6 +246,7 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
         setShowLostInput(false);
         setShowActions(false);
         setShowQuickReplies(false);
+        setConfirmModal(null);
     }, [session.id]);
 
     const sendMutation = useMutation({
@@ -246,6 +309,11 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
         onSuccess:  () => qc.invalidateQueries({ queryKey: ['conversations'] }),
     });
 
+    const confirm = (modal: ConfirmModal) => {
+        setShowActions(false);
+        setConfirmModal(modal);
+    };
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) setMediaPreview(file);
@@ -266,11 +334,14 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
     };
 
     const isSending = sendMutation.isPending || sendMediaMutation.isPending;
-
     const { is_blacklisted, needs_agent_review } = session.customer;
 
     return (
         <div className="flex flex-col h-full">
+            {confirmModal && (
+                <ConfirmationModal modal={confirmModal} onClose={() => setConfirmModal(null)} />
+            )}
+
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface shrink-0">
                 <button onClick={onClose} className="lg:hidden text-text-muted hover:text-text transition-colors">
                     <ArrowLeft size={18} />
@@ -316,16 +387,13 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                         </button>
                         {showActions && (
                             <div className="absolute right-0 top-full mt-1 bg-bg border border-border rounded-xl shadow-lg z-50 min-w-[220px] py-1 overflow-hidden">
-
                                 <p className="px-4 py-1.5 text-xs font-medium text-text-muted uppercase tracking-wide">Estado del pedido</p>
                                 {['confirmed', 'cancelled', 'shipped', 'delivered', 'lost'].map(s => (
                                     <button key={s}
                                         onClick={() => { statusMutation.mutate(s); setShowActions(false); }}
                                         className="w-full text-left px-4 py-2 text-xs text-text hover:bg-surface transition-colors flex items-center gap-2"
                                     >
-                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                            STATUS_CONFIG[s]?.color.replace('text-', 'bg-')
-                                        }`} />
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_CONFIG[s]?.color.replace('text-', 'bg-')}`} />
                                         Marcar como {STATUS_CONFIG[s]?.label}
                                     </button>
                                 ))}
@@ -344,9 +412,15 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
 
                                 {is_blacklisted ? (
                                     <button
-                                        onClick={() => { unblacklistMutation.mutate(); setShowActions(false); }}
-                                        disabled={unblacklistMutation.isPending}
-                                        className="w-full text-left px-4 py-2 text-xs text-success hover:bg-surface transition-colors flex items-center gap-2 disabled:opacity-50"
+                                        onClick={() => confirm({
+                                            title:       'Desbloquear cliente',
+                                            description: `¿Quieres volver a permitirle al bot atender a ${session.customer.customer_name ?? session.customer.phone}?`,
+                                            consequence: 'El bot volverá a responderle normalmente. Úsalo solo si fue bloqueado por error.',
+                                            confirmText: 'Sí, desbloquear',
+                                            danger:      false,
+                                            onConfirm:   () => unblacklistMutation.mutate(),
+                                        })}
+                                        className="w-full text-left px-4 py-2 text-xs text-success hover:bg-surface transition-colors flex items-center gap-2"
                                     >
                                         <ShieldOff size={12} className="shrink-0" />
                                         Desbloquear cliente
@@ -355,9 +429,15 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                 ) : (
                                     !needs_agent_review && (
                                         <button
-                                            onClick={() => { blacklistMutation.mutate(); setShowActions(false); }}
-                                            disabled={blacklistMutation.isPending}
-                                            className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2 disabled:opacity-50"
+                                            onClick={() => confirm({
+                                                title:       'Bloquear cliente',
+                                                description: `¿Estás seguro de que quieres bloquear a ${session.customer.customer_name ?? session.customer.phone}?`,
+                                                consequence: 'El bot dejará de responderle para siempre. El cliente no sabrá que está bloqueado — simplemente el bot no le contestará.',
+                                                confirmText: 'Sí, bloquear',
+                                                danger:      true,
+                                                onConfirm:   () => blacklistMutation.mutate(),
+                                            })}
+                                            className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2"
                                         >
                                             <Shield size={12} className="shrink-0" />
                                             Bloquear cliente
@@ -370,7 +450,14 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                     <>
                                         <div className="border-t border-border my-1" />
                                         <button
-                                            onClick={() => { reviewMutation.mutate({ approved: true }); setShowActions(false); }}
+                                            onClick={() => confirm({
+                                                title:       'Aprobar revisión',
+                                                description: `¿Confirmas que ${session.customer.customer_name ?? session.customer.phone} puede seguir siendo atendido por el bot?`,
+                                                consequence: 'El bot volverá a responderle con normalidad. El flag de revisión se eliminará.',
+                                                confirmText: 'Sí, aprobar',
+                                                danger:      false,
+                                                onConfirm:   () => reviewMutation.mutate({ approved: true }),
+                                            })}
                                             className="w-full text-left px-4 py-2 text-xs text-success hover:bg-surface transition-colors flex items-center gap-2"
                                         >
                                             <UserCheck size={12} className="shrink-0" />
@@ -378,7 +465,14 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                             <Tooltip text={ACTION_TOOLTIPS.aprobar_revision} />
                                         </button>
                                         <button
-                                            onClick={() => { reviewMutation.mutate({ approved: true, trustFully: true }); setShowActions(false); }}
+                                            onClick={() => confirm({
+                                                title:       'Aprobar y confiar',
+                                                description: `¿Quieres marcar a ${session.customer.customer_name ?? session.customer.phone} como cliente de confianza?`,
+                                                consequence: 'El bot lo atenderá siempre sin importar cuántos pedidos cancele o expire. Es una decisión permanente — úsala solo si conoces bien al cliente.',
+                                                confirmText: 'Sí, confiar',
+                                                danger:      false,
+                                                onConfirm:   () => reviewMutation.mutate({ approved: true, trustFully: true }),
+                                            })}
                                             className="w-full text-left px-4 py-2 text-xs text-primary hover:bg-surface transition-colors flex items-center gap-2"
                                         >
                                             <CheckCircle size={12} className="shrink-0" />
@@ -387,7 +481,14 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                         </button>
                                         {!is_blacklisted && (
                                             <button
-                                                onClick={() => { reviewMutation.mutate({ approved: false }); setShowActions(false); }}
+                                                onClick={() => confirm({
+                                                    title:       'Escalar a blacklist',
+                                                    description: `¿Estás seguro de bloquear permanentemente a ${session.customer.customer_name ?? session.customer.phone}?`,
+                                                    consequence: 'El bot lo ignorará para siempre. No podrá confirmar pedidos ni recibir mensajes del bot. Esta acción es difícil de revertir.',
+                                                    confirmText: 'Sí, bloquear permanentemente',
+                                                    danger:      true,
+                                                    onConfirm:   () => reviewMutation.mutate({ approved: false }),
+                                                })}
                                                 className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2"
                                             >
                                                 <XCircle size={12} className="shrink-0" />
@@ -562,9 +663,9 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                 <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-3">Cliente</p>
                                 <div className="space-y-2.5">
                                     {[
-                                        { label: 'Teléfono', value: session.customer.phone,                                                         mono: true  },
-                                        { label: 'Tier',     value: TIER_LABELS[session.customer.customer_tier] ?? session.customer.customer_tier,  mono: false },
-                                        { label: 'Riesgo',   value: `${session.customer.risk_score ?? 0} pts`,                                      mono: false },
+                                        { label: 'Teléfono', value: session.customer.phone,                                                        mono: true  },
+                                        { label: 'Tier',     value: TIER_LABELS[session.customer.customer_tier] ?? session.customer.customer_tier, mono: false },
+                                        { label: 'Riesgo',   value: `${session.customer.risk_score ?? 0} pts`,                                     mono: false },
                                     ].map(({ label, value, mono }) => (
                                         <div key={label} className="flex justify-between items-center">
                                             <span className="text-xs text-text-muted">{label}</span>
