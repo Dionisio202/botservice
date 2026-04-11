@@ -31,15 +31,15 @@ export class OrdersController {
         return OrdersPresenter.toResponse(order);
     }
 
-    @Patch(':id/status')
-    @Roles('admin')
-    updateStatus(
-        @Param('id') id: string,
-        @Body() body: { status: string },
-    ) {
-        return this.prisma.botOrderSession.update({
-            where: { id: Number(id) },
-            data:  { status: body.status as any },
-        });
-    }
+@Patch(':id/status')
+@Roles('admin')
+updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string },
+) {
+    return this.prisma.botOrderSession.update({
+        where: { order_id: Number(id) },
+        data:  { status: body.status as any },
+    });
+}
 }

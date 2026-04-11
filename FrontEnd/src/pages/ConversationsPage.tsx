@@ -4,7 +4,7 @@ import {
     Search, Filter, Send, Paperclip, X, Info,
     ArrowLeft, CheckCircle, XCircle, AlertTriangle,
     Phone, Clock, ShieldOff, UserCheck, DollarSign,
-    ChevronDown, FileText, RefreshCw, Zap,
+    ChevronDown, FileText, RefreshCw, Zap, Shield,
 } from 'lucide-react';
 import { panelService } from '@/services/panelService';
 import { messagesService } from '@/services/messagesService';
@@ -33,6 +33,26 @@ const STATUS_FILTERS = [
 ];
 
 const TIER_LABELS: Record<string, string> = { new: 'Nuevo', regular: 'Regular', loyal: 'Leal' };
+
+const ACTION_TOOLTIPS: Record<string, string> = {
+    registrar_monto:   'Anota cuánto dinero se perdió con este cliente. Afecta su historial de riesgo.',
+    desbloquear:       'Permite que el bot vuelva a atender a este cliente. Úsalo si fue bloqueado por error.',
+    bloquear:          'El cliente no podrá ser atendido por el bot. Úsalo si es fraudulento o molesto.',
+    aprobar_revision:  'El bot vuelve a atender a este cliente normalmente.',
+    aprobar_confiar:   'El bot vuelve a atender al cliente y no lo bloqueará automáticamente nunca más, sin importar su comportamiento.',
+    escalar_blacklist: 'Bloquea permanentemente al cliente. El bot lo ignorará para siempre.',
+};
+
+function Tooltip({ text }: { text: string }) {
+    return (
+        <span className="ml-auto pl-2 text-text-muted hover:text-text cursor-help group relative">
+            <Info size={11} />
+            <span className="absolute right-0 top-full mt-1 w-48 bg-bg border border-border rounded-lg px-3 py-2 text-xs text-text-muted shadow-lg z-50 hidden group-hover:block">
+                {text}
+            </span>
+        </span>
+    );
+}
 
 function StatusBadge({ status }: { status: string }) {
     const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.expired;
@@ -129,16 +149,16 @@ function ChatMessage({ msg }: { msg: Message }) {
 }
 
 function ChatPanel({ session, onClose }: { session: ConversationSession; onClose: () => void }) {
-    const qc                                    = useQueryClient();
-    const [text, setText]                       = useState('');
-    const [showInfo, setShowInfo]               = useState(false);
+    const qc                                      = useQueryClient();
+    const [text, setText]                         = useState('');
+    const [showInfo, setShowInfo]                 = useState(false);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
-    const [lostAmount, setLostAmount]           = useState('');
-    const [showLostInput, setShowLostInput]     = useState(false);
-    const [showActions, setShowActions]         = useState(false);
-    const [mediaPreview, setMediaPreview]       = useState<File | null>(null);
-    const bottomRef                             = useRef<HTMLDivElement>(null);
-    const fileRef                               = useRef<HTMLInputElement>(null);
+    const [lostAmount, setLostAmount]             = useState('');
+    const [showLostInput, setShowLostInput]       = useState(false);
+    const [showActions, setShowActions]           = useState(false);
+    const [mediaPreview, setMediaPreview]         = useState<File | null>(null);
+    const bottomRef                               = useRef<HTMLDivElement>(null);
+    const fileRef                                 = useRef<HTMLInputElement>(null);
 
     const { data: msgsData, isLoading: msgsLoading, isFetching, refetch } = useQuery({
         queryKey: ['messages', session.id],
@@ -146,8 +166,8 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
     });
 
     const { data: qrData } = useQuery({
-        queryKey: ['quick-replies'],
-        queryFn:  messagesService.getQuickReplies,
+        queryKey:  ['quick-replies'],
+        queryFn:   messagesService.getQuickReplies,
         staleTime: 60_000,
     });
 
@@ -216,6 +236,16 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
         onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
     });
 
+    const unblacklistMutation = useMutation({
+        mutationFn: () => customersService.unblacklist(session.customer.phone),
+        onSuccess:  () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    });
+
+    const blacklistMutation = useMutation({
+        mutationFn: () => customersService.blacklist(session.customer.phone, 'Bloqueado manualmente por agente', 0),
+        onSuccess:  () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    });
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) setMediaPreview(file);
@@ -237,6 +267,8 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
 
     const isSending = sendMutation.isPending || sendMediaMutation.isPending;
 
+    const { is_blacklisted, needs_agent_review } = session.customer;
+
     return (
         <div className="flex flex-col h-full">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface shrink-0">
@@ -251,9 +283,14 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                         <p className="text-sm font-medium text-text truncate">
                             {session.customer.customer_name ?? session.customer.phone}
                         </p>
-                        {session.customer.needs_agent_review && (
+                        {needs_agent_review && (
                             <span className="text-xs bg-warning/10 text-warning border border-warning/20 px-1.5 py-0.5 rounded-full shrink-0">
                                 Revisión
+                            </span>
+                        )}
+                        {is_blacklisted && (
+                            <span className="text-xs bg-danger/10 text-danger border border-danger/20 px-1.5 py-0.5 rounded-full shrink-0">
+                                Bloqueado
                             </span>
                         )}
                     </div>
@@ -278,54 +315,86 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                             Acciones <ChevronDown size={12} />
                         </button>
                         {showActions && (
-                            <div className="absolute right-0 top-full mt-1 bg-bg border border-border rounded-xl shadow-lg z-50 min-w-[190px] py-1 overflow-hidden">
+                            <div className="absolute right-0 top-full mt-1 bg-bg border border-border rounded-xl shadow-lg z-50 min-w-[220px] py-1 overflow-hidden">
+
+                                <p className="px-4 py-1.5 text-xs font-medium text-text-muted uppercase tracking-wide">Estado del pedido</p>
                                 {['confirmed', 'cancelled', 'shipped', 'delivered', 'lost'].map(s => (
                                     <button key={s}
                                         onClick={() => { statusMutation.mutate(s); setShowActions(false); }}
                                         className="w-full text-left px-4 py-2 text-xs text-text hover:bg-surface transition-colors flex items-center gap-2"
                                     >
-                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                                             STATUS_CONFIG[s]?.color.replace('text-', 'bg-')
                                         }`} />
                                         Marcar como {STATUS_CONFIG[s]?.label}
                                     </button>
                                 ))}
+
                                 <div className="border-t border-border my-1" />
+                                <p className="px-4 py-1.5 text-xs font-medium text-text-muted uppercase tracking-wide">Cliente</p>
+
                                 <button
                                     onClick={() => { setShowLostInput(l => !l); setShowActions(false); }}
                                     className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2"
                                 >
-                                    <DollarSign size={12} /> Registrar monto perdido
+                                    <DollarSign size={12} className="shrink-0" />
+                                    Registrar monto perdido
+                                    <Tooltip text={ACTION_TOOLTIPS.registrar_monto} />
                                 </button>
-                                {session.customer.is_blacklisted && (
+
+                                {is_blacklisted ? (
                                     <button
-                                        onClick={() => { customersService.unblacklist(session.customer.phone); setShowActions(false); }}
-                                        className="w-full text-left px-4 py-2 text-xs text-success hover:bg-surface transition-colors flex items-center gap-2"
+                                        onClick={() => { unblacklistMutation.mutate(); setShowActions(false); }}
+                                        disabled={unblacklistMutation.isPending}
+                                        className="w-full text-left px-4 py-2 text-xs text-success hover:bg-surface transition-colors flex items-center gap-2 disabled:opacity-50"
                                     >
-                                        <ShieldOff size={12} /> Desbloquear cliente
+                                        <ShieldOff size={12} className="shrink-0" />
+                                        Desbloquear cliente
+                                        <Tooltip text={ACTION_TOOLTIPS.desbloquear} />
                                     </button>
+                                ) : (
+                                    !needs_agent_review && (
+                                        <button
+                                            onClick={() => { blacklistMutation.mutate(); setShowActions(false); }}
+                                            disabled={blacklistMutation.isPending}
+                                            className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            <Shield size={12} className="shrink-0" />
+                                            Bloquear cliente
+                                            <Tooltip text={ACTION_TOOLTIPS.bloquear} />
+                                        </button>
+                                    )
                                 )}
-                                {session.customer.needs_agent_review && (
+
+                                {needs_agent_review && (
                                     <>
                                         <div className="border-t border-border my-1" />
                                         <button
                                             onClick={() => { reviewMutation.mutate({ approved: true }); setShowActions(false); }}
                                             className="w-full text-left px-4 py-2 text-xs text-success hover:bg-surface transition-colors flex items-center gap-2"
                                         >
-                                            <UserCheck size={12} /> Aprobar revisión
+                                            <UserCheck size={12} className="shrink-0" />
+                                            Aprobar revisión
+                                            <Tooltip text={ACTION_TOOLTIPS.aprobar_revision} />
                                         </button>
                                         <button
                                             onClick={() => { reviewMutation.mutate({ approved: true, trustFully: true }); setShowActions(false); }}
                                             className="w-full text-left px-4 py-2 text-xs text-primary hover:bg-surface transition-colors flex items-center gap-2"
                                         >
-                                            <CheckCircle size={12} /> Aprobar y confiar
+                                            <CheckCircle size={12} className="shrink-0" />
+                                            Aprobar y confiar
+                                            <Tooltip text={ACTION_TOOLTIPS.aprobar_confiar} />
                                         </button>
-                                        <button
-                                            onClick={() => { reviewMutation.mutate({ approved: false }); setShowActions(false); }}
-                                            className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2"
-                                        >
-                                            <XCircle size={12} /> Escalar a blacklist
-                                        </button>
+                                        {!is_blacklisted && (
+                                            <button
+                                                onClick={() => { reviewMutation.mutate({ approved: false }); setShowActions(false); }}
+                                                className="w-full text-left px-4 py-2 text-xs text-danger hover:bg-surface transition-colors flex items-center gap-2"
+                                            >
+                                                <XCircle size={12} className="shrink-0" />
+                                                Escalar a blacklist
+                                                <Tooltip text={ACTION_TOOLTIPS.escalar_blacklist} />
+                                            </button>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -471,11 +540,11 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                 <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-3">Pedido</p>
                                 <div className="space-y-2.5">
                                     {[
-                                        { label: 'Orden',    value: `#${session.order_id}`,                                                                      mono: true  },
-                                        { label: 'Total',    value: `$${Number(session.order_total ?? 0).toFixed(2)}`,                                           mono: false },
-                                        { label: 'Intentos', value: String(session.attempts),                                                                    mono: false },
-                                        { label: 'Creado',   value: new Date(session.created_at).toLocaleDateString('es-EC', { day: '2-digit', month: 'short' }),mono: false },
-                                        { label: 'Paso',     value: session.conv_step.replace('awaiting_', ''),                                                  mono: true  },
+                                        { label: 'Orden',    value: `#${session.order_id}`,                                                                       mono: true  },
+                                        { label: 'Total',    value: `$${Number(session.order_total ?? 0).toFixed(2)}`,                                            mono: false },
+                                        { label: 'Intentos', value: String(session.attempts),                                                                     mono: false },
+                                        { label: 'Creado',   value: new Date(session.created_at).toLocaleDateString('es-EC', { day: '2-digit', month: 'short' }), mono: false },
+                                        { label: 'Paso',     value: session.conv_step.replace('awaiting_', ''),                                                   mono: true  },
                                     ].map(({ label, value, mono }) => (
                                         <div key={label} className="flex justify-between items-center">
                                             <span className="text-xs text-text-muted">{label}</span>
@@ -493,23 +562,23 @@ function ChatPanel({ session, onClose }: { session: ConversationSession; onClose
                                 <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-3">Cliente</p>
                                 <div className="space-y-2.5">
                                     {[
-                                        { label: 'Teléfono', value: session.customer.phone,                                                          mono: true  },
-                                        { label: 'Tier',     value: TIER_LABELS[session.customer.customer_tier] ?? session.customer.customer_tier,   mono: false },
-                                        { label: 'Riesgo',   value: `${session.customer.risk_score} pts`,                                            mono: false },
+                                        { label: 'Teléfono', value: session.customer.phone,                                                         mono: true  },
+                                        { label: 'Tier',     value: TIER_LABELS[session.customer.customer_tier] ?? session.customer.customer_tier,  mono: false },
+                                        { label: 'Riesgo',   value: `${session.customer.risk_score ?? 0} pts`,                                      mono: false },
                                     ].map(({ label, value, mono }) => (
                                         <div key={label} className="flex justify-between items-center">
                                             <span className="text-xs text-text-muted">{label}</span>
                                             <span className={`text-xs text-text ${mono ? 'font-mono' : 'font-medium'}`}>{value}</span>
                                         </div>
                                     ))}
-                                    {session.customer.is_blacklisted && (
+                                    {is_blacklisted && (
                                         <div className="flex items-center gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 rounded-lg px-2 py-1.5 mt-1">
-                                            <AlertTriangle size={12} /> En blacklist
+                                            <AlertTriangle size={12} /> Bloqueado — el bot lo ignora completamente
                                         </div>
                                     )}
-                                    {session.customer.needs_agent_review && (
+                                    {needs_agent_review && (
                                         <div className="flex items-center gap-1.5 text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-2 py-1.5">
-                                            <Clock size={12} /> Necesita revisión
+                                            <Clock size={12} /> En revisión — el bot está en silencio, atiéndelo tú
                                         </div>
                                     )}
                                 </div>

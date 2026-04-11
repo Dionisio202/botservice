@@ -49,6 +49,7 @@ export class PanelController {
                     agent_review_reason: true,
                     risk_score:          true,
                     customer_tier:       true,
+                     last_order_at:       true,
                     order_sessions: {
                         select:  { order_id: true, order_items: true, created_at: true },
                         orderBy: { created_at: 'desc' },
