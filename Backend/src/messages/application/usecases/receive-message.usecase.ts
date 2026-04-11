@@ -35,7 +35,8 @@ export class ReceiveMessageUseCase {
         const customer = await this.customerRepo.findByPhone(phone);
         if (!customer) return;
 
-        const session = await this.orderRepo.findActivePendingByPhone(phone);
+        const session = await this.orderRepo.findActivePendingByPhone(phone) 
+    ?? await this.orderRepo.findLatestWithin24h(phone);
 
         if (media) {
             const mediaUrl = await this.whatsApp.downloadMedia(media.mediaId);

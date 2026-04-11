@@ -23,6 +23,7 @@ findLastSessionByPhone(phone: string): Promise<(Order & { phone: string }) | nul
 setReviewRequestedAt(orderId: number): Promise<void>;
 updateConvStepOnly(orderId: number, step: ConvStep): Promise<void>;
 updateOrderItems(orderId: number, items: unknown, newTotal: number): Promise<void>;
+findLatestWithin24h(phone: string): Promise<(Order & { phone: string }) | null>;
 }
 
 export interface CreateOrderData {

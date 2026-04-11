@@ -172,4 +172,17 @@ async updateConvStepOnly(orderId: number, step: ConvStep): Promise<void> {
             row.max_attempts,
         );
     }
+    async findLatestWithin24h(phone: string): Promise<(Order & { phone: string }) | null> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const row = await this.prisma.botOrderSession.findFirst({
+        where: {
+            customer: { phone },
+            updated_at: { gte: cutoff },
+        },
+        include: { customer: true },
+        orderBy: { updated_at: 'desc' },
+    });
+    if (!row) return null;
+    return Object.assign(this.toEntity(row), { phone: row.customer.phone });
+}
 }
